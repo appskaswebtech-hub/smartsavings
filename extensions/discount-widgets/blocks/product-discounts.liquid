@@ -1,0 +1,217 @@
+{% comment %}
+  SmartDiscounts - Product Discounts
+  Shows all applicable discounts for the current product.
+  For free shipping, both specific-products and all-products campaigns
+  may appear if both apply to the product — each shows its own threshold.
+{% endcomment %}
+
+{{ 'discount-widgets.css' | asset_url | stylesheet_tag }}
+
+{% if block.settings.enabled %}
+<div
+  id="sd-proddisc-{{ block.id }}"
+  data-product-id="{{ product.id }}"
+  data-product-price="{{ product.selected_or_first_available_variant.price }}"
+  data-collections="{% for col in product.collections %}{{ col.id }}{% unless forloop.last %},{% endunless %}{% endfor %}"
+  data-sym="{{ cart.currency.symbol }}"
+  data-shop="{{ shop.permanent_domain }}"
+  style="display:none;margin:16px 0;"
+>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var B = '{{ block.id }}';
+  var box = document.getElementById('sd-proddisc-' + B);
+  if (!box) return;
+
+  var productId = box.dataset.productId || '';
+  var priceCents = parseInt(box.dataset.productPrice) || 0;
+  var price = priceCents / 100;
+  var collectionIds = (box.dataset.collections || '').split(',').filter(Boolean);
+  var S = box.dataset.sym || '$';
+
+  var headerBg = '{{ block.settings.header_bg }}';
+  var headerText = '{{ block.settings.header_text }}';
+  var borderColor = '{{ block.settings.border_color }}';
+  var borderRadius = '{{ block.settings.border_radius }}';
+  var tagBulk = '{{ block.settings.color_bulk }}';
+  var tagQty = '{{ block.settings.color_quantity }}';
+  var tagCart = '{{ block.settings.color_cart }}';
+  var tagShip = '{{ block.settings.color_shipping }}';
+  var tagBxgy = '{{ block.settings.color_bxgy }}';
+  var tagCode = '{{ block.settings.color_code }}';
+  var headerTitle = {{ block.settings.header_title | json }};
+
+  function fmt(cents) {
+    var s = (cents / 100).toFixed(2).split('.');
+    s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return S + s.join('.');
+  }
+
+  function fmtAmount(dollars) {
+    var s = parseFloat(dollars).toFixed(2).split('.');
+    s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return S + s.join('.');
+  }
+
+  function getTypeColor(type) {
+    var colors = {
+      bulk_price: tagBulk,
+      quantity_discount: tagQty,
+      cart_goal: tagCart,
+      shipping_discount: tagShip,
+      buy_x_get_y: tagBxgy,
+      advanced_discount_code: tagCode,
+    };
+    return colors[type] || '#6366F1';
+  }
+
+  function getTypeLabel(type) {
+    var labels = {
+      bulk_price: '🏷️ Sale',
+      quantity_discount: '📦 Quantity Deal',
+      cart_goal: '🎯 Cart Goal',
+      shipping_discount: '🚚 Free Shipping',
+      buy_x_get_y: '🎁 Buy X Get Y',
+      advanced_discount_code: '🔑 Discount Code',
+    };
+    return labels[type] || type;
+  }
+
+  fetch('/apps/smartdiscounts?shop=' + encodeURIComponent(box.dataset.shop || ''))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var campaigns = data.campaigns || [];
+      var applicable = [];
+
+      campaigns.forEach(function(c) {
+        if (c.status !== 'active') return;
+
+        var applies = false;
+        if (c.appliesTo === 'all' || !c.appliesTo) {
+          applies = true;
+        } else if (c.appliesTo === 'specific_products' && c.productIds) {
+          for (var j = 0; j < c.productIds.length; j++) {
+            if (String(c.productIds[j]) === String(productId)) { applies = true; break; }
+          }
+        } else if (c.appliesTo === 'specific_collections' && c.collectionIds) {
+          for (var j = 0; j < c.collectionIds.length; j++) {
+            for (var k = 0; k < collectionIds.length; k++) {
+              if (String(c.collectionIds[j]) === String(collectionIds[k])) { applies = true; break; }
+            }
+            if (applies) break;
+          }
+        }
+
+        if (applies) applicable.push(c);
+      });
+
+      // No dedup — show both specific and all-products free shipping
+      // if both apply. Each row shows its own threshold so the customer
+      // sees both options clearly.
+
+      if (applicable.length === 0) return;
+
+      var html = '<div style="border:1px solid ' + borderColor + ';border-radius:' + borderRadius + 'px;overflow:hidden;">';
+
+      // Header
+      html += '<div style="background:' + headerBg + ';color:' + headerText + ';padding:10px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;">';
+      html += '<span style="font-size:16px;">🔥</span>' + headerTitle;
+      html += '<span style="background:' + headerText + '22;color:' + headerText + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-left:auto;">' + applicable.length + '</span>';
+      html += '</div>';
+
+      applicable.forEach(function(c, idx) {
+        var color = getTypeColor(c.type);
+        var label = getTypeLabel(c.type);
+
+        html += '<div style="padding:12px 16px;border-top:1px solid rgba(0,0,0,0.06);' + (idx % 2 === 1 ? 'background:rgba(0,0,0,0.01);' : '') + '">';
+
+        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">';
+        html += '<span style="background:' + color + ';color:white;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap;">' + label + '</span>';
+        html += '<span style="font-weight:700;font-size:13px;">' + c.name + '</span>';
+        html += '</div>';
+
+        if (c.type === 'bulk_price') {
+          var discVal = c.discountType === 'percentage' ? c.discountValue + '% off' : S + c.discountValue + ' off';
+          var savedPrice = c.discountType === 'percentage' ? price * (1 - c.discountValue / 100) : price - c.discountValue;
+          html += '<div style="font-size:12px;color:#666;margin-bottom:4px;">Get <b style="color:#10B981;">' + discVal + '</b> on this product</div>';
+          html += '<div style="font-size:13px;"><s style="color:#999;margin-right:6px;">' + fmt(priceCents) + '</s><b style="color:#10B981;">' + fmt(Math.round(savedPrice * 100)) + '</b></div>';
+        }
+
+        else if (c.type === 'quantity_discount' && c.tiers && c.tiers.length > 0) {
+          html += '<div style="font-size:12px;color:#666;margin-bottom:6px;">Buy more, save more on this product:</div>';
+          html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+          c.tiers.forEach(function(t) {
+            var qty = t.quantity || t.qty;
+            var disc = t.discount || t.disc;
+            html += '<span style="background:#f0fdf4;border:1px solid #bbf7d0;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;color:#166534;">Buy ' + qty + '+ → ' + disc + '% off</span>';
+          });
+          html += '</div>';
+        }
+
+        else if (c.type === 'cart_goal' && c.tiers && c.tiers.length > 0) {
+          html += '<div style="font-size:12px;color:#666;margin-bottom:6px;">Spend more, save more:</div>';
+          html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+          c.tiers.forEach(function(t) {
+            var amt = t.amount || t.spend;
+            var disc = t.discount;
+            html += '<span style="background:#eef2ff;border:1px solid #c7d2fe;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;color:#3730a3;">Spend $' + amt + '+ → ' + disc + '% off</span>';
+          });
+          html += '</div>';
+        }
+
+        else if (c.type === 'shipping_discount') {
+          var threshold = parseFloat(c.minimumAmount);
+          var scope = (c.appliesTo === 'specific_products') ? 'on this product' : 'on any order';
+          if (!isNaN(threshold) && threshold > 0) {
+            html += '<div style="font-size:12px;color:#666;">🚚 <b style="color:#10B981;">Free shipping</b> ' + scope + ' after adding <b>' + fmtAmount(threshold) + '</b></div>';
+          } else {
+            html += '<div style="font-size:12px;color:#666;">🚚 <b style="color:#10B981;">Free shipping</b> available ' + scope + '</div>';
+          }
+        }
+
+        else if (c.type === 'buy_x_get_y') {
+          html += '<div style="font-size:12px;color:#666;">🎁 Buy <b>' + (c.discountValue || 'X') + '</b> items, get <b style="color:#10B981;">1 free</b></div>';
+        }
+
+        else if (c.type === 'advanced_discount_code') {
+          var discVal = c.discountType === 'percentage' ? c.discountValue + '% off' : S + c.discountValue + ' off';
+          html += '<div style="font-size:12px;color:#666;">Use discount code at checkout for <b style="color:#10B981;">' + discVal + '</b></div>';
+        }
+
+        html += '</div>';
+      });
+
+      html += '</div>';
+
+      box.innerHTML = html;
+      box.style.display = 'block';
+    })
+    .catch(function() {});
+});
+</script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Product Discounts",
+  "target": "section",
+  "settings": [
+    { "type": "checkbox", "id": "enabled", "label": "Enable product discounts widget", "default": true },
+    { "type": "text", "id": "header_title", "label": "Header title", "default": "Available Discounts" },
+    { "type": "header", "content": "Colors" },
+    { "type": "color", "id": "header_bg", "label": "Header background", "default": "#1a1a1a" },
+    { "type": "color", "id": "header_text", "label": "Header text", "default": "#ffffff" },
+    { "type": "color", "id": "border_color", "label": "Border color", "default": "#E0E0E0" },
+    { "type": "range", "id": "border_radius", "label": "Border radius", "min": 0, "max": 20, "step": 1, "default": 8, "unit": "px" },
+    { "type": "header", "content": "Tag colors by type" },
+    { "type": "color", "id": "color_bulk", "label": "Bulk price tag", "default": "#f59e0b" },
+    { "type": "color", "id": "color_quantity", "label": "Quantity discount tag", "default": "#10B981" },
+    { "type": "color", "id": "color_cart", "label": "Cart goal tag", "default": "#6366F1" },
+    { "type": "color", "id": "color_shipping", "label": "Shipping tag", "default": "#3b82f6" },
+    { "type": "color", "id": "color_bxgy", "label": "Buy X Get Y tag", "default": "#ec4899" },
+    { "type": "color", "id": "color_code", "label": "Discount code tag", "default": "#8b5cf6" }
+  ]
+}
+{% endschema %}

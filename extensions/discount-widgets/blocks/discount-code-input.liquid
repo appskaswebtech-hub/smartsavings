@@ -1,0 +1,237 @@
+{% comment %}
+  SmartDiscounts - Discount Code Input
+  Applies code directly via Shopify's /discount/ URL - no proxy needed
+{% endcomment %}
+
+{{ 'discount-widgets.css' | asset_url | stylesheet_tag }}
+
+{% if block.settings.enabled %}
+<div
+  id="sd-code-{{ block.id }}"
+  data-product-price="{{ product.selected_or_first_available_variant.price }}"
+  data-sym="{{ cart.currency.symbol }}"
+  data-shop="{{ shop.permanent_domain }}"
+  style="border:1px solid {{ block.settings.border_color }};border-radius:{{ block.settings.border_radius }}px;overflow:hidden;margin:16px 0;display:none;"
+>
+  {%- comment -%} Prompt {%- endcomment -%}
+  <div id="sd-code-toggle-{{ block.id }}" style="padding:14px 16px;text-align:center;cursor:pointer;font-size:14px;font-weight:600;color:{{ block.settings.text_color }};transition:background 0.15s;">
+    {{ block.settings.prompt_text }}
+  </div>
+
+  {%- comment -%} Input form {%- endcomment -%}
+  <div id="sd-code-form-{{ block.id }}" style="display:none;padding:14px 16px;">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input type="text" id="sd-code-input-{{ block.id }}" placeholder="{{ block.settings.placeholder }}" style="flex:1;padding:10px 14px;border:1px solid {{ block.settings.border_color }};border-radius:6px;font-size:14px;outline:none;text-transform:uppercase;" />
+      <button id="sd-code-apply-{{ block.id }}" style="padding:10px 20px;background:{{ block.settings.btn_bg }};color:{{ block.settings.btn_text }};border:none;border-radius:6px;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap;">{{ block.settings.btn_label }}</button>
+    </div>
+    <div id="sd-code-error-{{ block.id }}" style="display:none;color:#ef4444;font-size:12px;margin-top:6px;font-weight:600;"></div>
+    <button id="sd-code-close-{{ block.id }}" style="margin-top:8px;padding:8px 16px;background:#f5f5f5;color:#666;border:1px solid #ddd;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;">Close</button>
+  </div>
+
+  {%- comment -%} Result {%- endcomment -%}
+  <div id="sd-code-result-{{ block.id }}" style="display:none;"></div>
+</div>
+
+<style>
+  #sd-code-toggle-{{ block.id }}:hover { background: rgba(0,0,0,0.02); }
+  #sd-code-input-{{ block.id }}:focus { border-color: {{ block.settings.btn_bg }}; box-shadow: 0 0 0 2px {{ block.settings.btn_bg }}22; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var B = '{{ block.id }}';
+  var box = document.getElementById('sd-code-' + B);
+  if (!box) return;
+
+  var shop = box.dataset.shop || '';
+
+  // Check if any active advanced_discount_code campaigns exist
+  fetch('/apps/smartdiscounts?shop=' + encodeURIComponent(shop))
+    .then(function(r) {
+      if (!r.ok) throw new Error('proxy error');
+      return r.json();
+    })
+    .then(function(data) {
+      var campaigns = data.campaigns || [];
+      var hasActiveCode = campaigns.some(function(c) {
+        return c.type === 'advanced_discount_code' && c.status === 'active';
+      });
+      if (hasActiveCode) {
+        box.style.display = 'block';
+      }
+    })
+    .catch(function() {
+      // Proxy failed (dev mode) - show block as fallback
+      box.style.display = 'block';
+    });
+
+  var toggle = document.getElementById('sd-code-toggle-' + B);
+  var form = document.getElementById('sd-code-form-' + B);
+  var input = document.getElementById('sd-code-input-' + B);
+  var applyBtn = document.getElementById('sd-code-apply-' + B);
+  var closeBtn = document.getElementById('sd-code-close-' + B);
+  var errorEl = document.getElementById('sd-code-error-' + B);
+  var resultEl = document.getElementById('sd-code-result-' + B);
+  var btnLabel = {{ block.settings.btn_label | json }};
+
+  toggle.addEventListener('click', function() {
+    form.style.display = 'block';
+    toggle.style.display = 'none';
+    input.focus();
+  });
+  closeBtn.addEventListener('click', function() {
+    form.style.display = 'none';
+    toggle.style.display = 'block';
+    errorEl.style.display = 'none';
+  });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); applyBtn.click(); }
+  });
+
+  applyBtn.addEventListener('click', function() {
+    var code = (input.value || '').trim().toUpperCase();
+    if (!code) {
+      errorEl.textContent = 'Please enter a discount code';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    applyBtn.textContent = 'Applying...';
+    applyBtn.disabled = true;
+    errorEl.style.display = 'none';
+
+    // Step 1: Get cart state BEFORE applying code
+    fetch('/cart.js', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(cartBefore) {
+        var beforeTotal = cartBefore.total_price || 0;
+        var beforeDiscounts = (cartBefore.cart_level_discount_applications || []).length;
+
+        // Step 2: Apply the discount code via Shopify's /discount/ URL using hidden iframe
+        return new Promise(function(resolve) {
+          var iframe = document.createElement('iframe');
+          iframe.style.display = 'none';
+          iframe.src = '/discount/' + encodeURIComponent(code);
+          iframe.onload = function() {
+            // Wait a moment for Shopify to process
+            setTimeout(function() {
+              iframe.remove();
+              resolve({ beforeTotal: beforeTotal, beforeDiscounts: beforeDiscounts });
+            }, 1000);
+          };
+          iframe.onerror = function() {
+            iframe.remove();
+            resolve({ beforeTotal: beforeTotal, beforeDiscounts: beforeDiscounts });
+          };
+          document.body.appendChild(iframe);
+          // Timeout fallback
+          setTimeout(function() { resolve({ beforeTotal: beforeTotal, beforeDiscounts: beforeDiscounts }); }, 3000);
+        });
+      })
+      .then(function(data) {
+        // Step 3: Check cart state AFTER applying code
+        return fetch('/cart.js', { credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(cartAfter) {
+            var afterTotal = cartAfter.total_price || 0;
+            var afterDiscounts = (cartAfter.cart_level_discount_applications || []).length;
+
+            // Check if discount was applied (total changed or new discount appeared)
+            var applied = afterTotal < data.beforeTotal || afterDiscounts > data.beforeDiscounts;
+
+            // Also check if the code appears in discount applications
+            var codeFound = false;
+            (cartAfter.cart_level_discount_applications || []).forEach(function(d) {
+              if (d.title && d.title.toUpperCase().indexOf(code) !== -1) codeFound = true;
+            });
+
+            return { applied: applied || codeFound, cart: cartAfter, code: code };
+          });
+      })
+      .then(function(result) {
+        if (result.applied) {
+          // SUCCESS - code was applied
+          form.style.display = 'none';
+          toggle.style.display = 'none';
+
+          var savings = 0;
+          (result.cart.cart_level_discount_applications || []).forEach(function(d) {
+            savings += d.total_allocated_amount || 0;
+          });
+
+          var html = '';
+          html += '<div style="background:#f0fdf4;padding:12px 16px;border-top:1px solid #bbf7d0;">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+          html += '<span style="color:#166534;font-weight:700;font-size:13px;">✅ Code "' + code + '" applied!</span>';
+          html += '<button onclick="fetch(\'/discount/\',{credentials:\'same-origin\'}).then(function(){location.reload();})" style="background:none;border:none;color:#999;font-size:12px;cursor:pointer;text-decoration:underline;">Remove</button>';
+          html += '</div>';
+          if (savings > 0) {
+            html += '<div style="margin-top:8px;font-size:13px;color:#166534;">💰 You\'re saving <b>$' + (savings / 100).toFixed(2) + '</b> with this code!</div>';
+          }
+          html += '<div style="margin-top:6px;font-size:11px;color:#999;">💡 Add products to cart using the "Add to cart" button below. Discount is active!</div>';
+          html += '</div>';
+
+          resultEl.innerHTML = html;
+          resultEl.style.display = 'block';
+        } else {
+          // If cart is empty, code might still be valid but no items to discount
+          if (!result.cart.items || result.cart.items.length === 0) {
+            form.style.display = 'none';
+            toggle.style.display = 'none';
+
+            var html = '';
+            html += '<div style="background:#fffbeb;padding:12px 16px;border-top:1px solid #fde68a;">';
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+            html += '<span style="color:#92400e;font-weight:700;font-size:13px;">🏷️ Code "' + code + '" saved!</span>';
+            html += '<button onclick="location.reload()" style="background:none;border:none;color:#999;font-size:12px;cursor:pointer;text-decoration:underline;">Remove</button>';
+            html += '</div>';
+            html += '<div style="margin-top:6px;font-size:12px;color:#92400e;">Add products to your cart and the discount will be applied automatically at checkout.</div>';
+            html += '</div>';
+
+            resultEl.innerHTML = html;
+            resultEl.style.display = 'block';
+          } else {
+            // Code didn't apply - invalid
+            errorEl.textContent = 'Invalid discount code or code does not apply to items in your cart.';
+            errorEl.style.display = 'block';
+            applyBtn.textContent = btnLabel;
+            applyBtn.disabled = false;
+          }
+        }
+      })
+      .catch(function() {
+        // Network error - still try to apply silently
+        var iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = '/discount/' + encodeURIComponent(code);
+        document.body.appendChild(iframe);
+        setTimeout(function() { iframe.remove(); }, 2000);
+
+        form.style.display = 'none';
+        toggle.style.display = 'none';
+        resultEl.innerHTML = '<div style="background:#f0fdf4;padding:12px 16px;border-top:1px solid #bbf7d0;"><span style="color:#166534;font-weight:700;font-size:13px;">🏷️ Code "' + code + '" submitted! Add items to cart and check at checkout.</span></div>';
+        resultEl.style.display = 'block';
+      });
+  });
+});
+</script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Discount Code Input",
+  "target": "section",
+  "settings": [
+    { "type": "checkbox", "id": "enabled", "label": "Enable discount code input", "default": true },
+    { "type": "text", "id": "prompt_text", "label": "Prompt text", "default": "🏷️ Have a discount code? Click here to enter it." },
+    { "type": "text", "id": "placeholder", "label": "Input placeholder", "default": "Enter discount code" },
+    { "type": "text", "id": "btn_label", "label": "Apply button text", "default": "Apply" },
+    { "type": "header", "content": "Styles" },
+    { "type": "color", "id": "text_color", "label": "Prompt text color", "default": "#333333" },
+    { "type": "color", "id": "btn_bg", "label": "Button background", "default": "#1a1a1a" },
+    { "type": "color", "id": "btn_text", "label": "Button text color", "default": "#ffffff" },
+    { "type": "color", "id": "border_color", "label": "Border color", "default": "#E0E0E0" },
+    { "type": "range", "id": "border_radius", "label": "Border radius", "min": 0, "max": 20, "step": 1, "default": 8, "unit": "px" }
+  ]
+}
+{% endschema %}

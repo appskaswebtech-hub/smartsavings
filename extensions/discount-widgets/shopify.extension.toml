@@ -1,0 +1,7 @@
+api_version = "2024-07"
+uid = "ad5168e6-b523-078c-66e5-be6ac50964ddaf5f4359"
+
+[[extensions]]
+type = "theme"
+name = "SmartDiscounts Widgets"
+handle = "discount-widgets"

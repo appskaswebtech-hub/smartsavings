@@ -5,30 +5,96 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "sqlite"
   url      = "file:dev.sqlite"
 }
 
 model Session {
-  id                  String    @id
-  shop                String
-  state               String
-  isOnline            Boolean   @default(false)
-  scope               String?
-  expires             DateTime?
-  accessToken         String
-  userId              BigInt?
-  firstName           String?
-  lastName            String?
-  email               String?
-  accountOwner        Boolean   @default(false)
-  locale              String?
-  collaborator        Boolean?  @default(false)
-  emailVerified       Boolean?  @default(false)
-  refreshToken        String?
-  refreshTokenExpires DateTime?
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+}
+
+model Campaign {
+  id                 String    @id @default(cuid())
+  shop               String
+  name               String
+  type               String    // quantity_discount, bulk_price, cart_goal, buy_x_get_y, shipping_discount
+  status             String    @default("draft") // draft, active, scheduled, expired, paused
+  discountType       String    // percentage, fixed_amount, free_shipping
+  discountValue      Float?
+  startDate          DateTime?
+  endDate            DateTime?
+  priority           Int       @default(0)
+  stackable          Boolean   @default(false)
+  appliesTo          String    @default("all") // all, specific_products, specific_collections
+  productIds         String?   // JSON array of product IDs
+  collectionIds      String?   // JSON array of collection IDs
+  excludeProductIds  String?   // JSON array of excluded product IDs
+  minimumQuantity    Int?
+  maximumQuantity    Int?
+  minimumAmount      Float?    // Minimum order value (for shipping_discount, cart_goal, etc.)
+  geoTarget          String?   // "domestic" | "all" — for shipping_discount campaigns
+  shopifyDiscountId  String?   // Discount node id returned by Shopify (so we can delete/update later)
+  tiers              String?   // JSON array of tier objects { qty, discount }
+  discountedVariants Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([shop])
+  @@index([shop, status])
+}
+
+model Setting {
+  id                  String  @id @default(cuid())
+  shop                String  @unique
+  roundPrices         Boolean @default(true)
+  roundingMethod      String  @default("nearest")
+  showCompareAtPrice  Boolean @default(true)
+  stackDiscounts      Boolean @default(false)
+  displaySavings      Boolean @default(true)
+  savingsFormat       String  @default("percentage")
+  excludeSaleProducts Boolean @default(false)
+  customCss           String  @default("")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model WidgetCustomization {
+  id          String @id @default(cuid())
+  shop        String
+  widgetType  String // countdown_start, countdown_end, quantity_table, bxgy_popup, shipping_bar, saving_cart, bxgy_fab
+  config      String // JSON configuration
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([shop, widgetType])
+  @@index([shop])
+}
+
+model Subscription {
+  id                  String    @id @default(cuid())
+  shop                String    @unique
+  planId              String
+  status              String    @default("pending")
+  shopifyChargeId     String?
+  confirmationUrl     String?
+  currentPeriodEnd    DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([shop])
 }
