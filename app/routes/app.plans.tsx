@@ -1,274 +1,248 @@
-import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { useState, useEffect } from "react";
 import {
-  Page,
-  Card,
-  Text,
-  BlockStack,
-  InlineStack,
-  Box,
-  Badge,
-  InlineGrid,
-  Divider,
-  Banner,
-} from "@shopify/polaris";
-import { authenticate } from "../shopify.server";
-import db from "../db.server";
-import {
-  syncSubscriptionFromShopify,
-  buildManagedPricingUrl,
-  type PlanId,
-} from "../billing.server";
+  json,
+  type ActionFunctionArgs,
+  type LoaderFunctionArgs,
+} from "@remix-run/node";
+import { useFetcher, useLoaderData } from "@remix-run/react";
 
-/**
- * The handle of your app as it appears in the Shopify admin URL.
- * Find it by visiting your app inside admin: the URL contains
- *   /apps/<app-handle>
- * For SmartSavings, the handle should be "smartsavings" but verify
- * by checking the admin URL once.
- */
-const APP_HANDLE = "smartsavings";
+// ✅ Import from plan-definitions (not plans.ts — avoids route name collision)
+import { PLANS, type PlanId } from "../plan-definitions";
+
+// ─── Loader ───────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
-  const { shop } = session;
+  const { authenticate } = await import("../shopify.server");
+  const { syncSubscriptionFromShopify } = await import("../billing.server");
 
-  // Re-sync from Shopify so the page always reflects the latest state.
-  // (Webhook is best-effort; this guarantees correctness on every render.)
-  const { planId } = await syncSubscriptionFromShopify(admin, shop);
+  const { admin, session } = await authenticate.admin(request);
 
-  const campaignCount = await db.campaign.count({ where: { shop } });
+  let planId: PlanId | null = null;
+  try {
+    const result = await syncSubscriptionFromShopify(admin, session.shop);
+    planId = result.planId;
+  } catch (err) {
+    console.error("[plans loader] subscription sync failed:", err);
+  }
 
-  // Build the URL where Shopify hosts the plan picker for this app.
-  const managedPricingUrl = buildManagedPricingUrl(shop, APP_HANDLE);
+  const appHandle = process.env.SHOPIFY_APP_HANDLE ?? "";
+  const storeHandle = session.shop.replace(/\.myshopify\.com$/, "");
+  const managedPricingUrl = `https://admin.shopify.com/store/${storeHandle}/charges/${appHandle}/pricing_plans`;
 
   return json({
-    currentPlanId: planId,
-    campaignCount,
+    hasActivePlan: planId !== null,
+    activePlanId: planId,
     managedPricingUrl,
   });
 };
 
-const PLAN_DISPLAY: Array<{
-  id: PlanId;
-  name: string;
-  price: string;
-  period: string;
-  badge: string | null;
-  color: string;
-  features: { text: string; included: boolean }[];
-}> = [
-  {
-    id: "base",
-    name: "Base",
-    price: "$9.99",
-    period: "/month",
-    badge: null,
-    color: "#6B7280",
-    features: [
-      { text: "Up to 50 discounted variants", included: true },
-      { text: "Up to 3 campaigns", included: true },
-      { text: "Quantity discount", included: true },
-      { text: "Bulk price editor", included: true },
-      { text: "Customizable widgets", included: true },
-      { text: "Email support", included: true },
-      { text: "Cart goal", included: false },
-      { text: "Buy X Get Y", included: false },
-      { text: "Shipping discount", included: false },
-      { text: "Campaign scheduling", included: false },
-      { text: "Priority support", included: false },
-    ],
-  },
-  {
-    id: "advanced",
-    name: "Advanced",
-    price: "$19.99",
-    period: "/month",
-    badge: "MOST POPULAR",
-    color: "#6366F1",
-    features: [
-      { text: "Up to 250 discounted variants", included: true },
-      { text: "Up to 10 campaigns", included: true },
-      { text: "All discount types", included: true },
-      { text: "Cart goal", included: true },
-      { text: "Buy X Get Y", included: true },
-      { text: "Shipping discount", included: true },
-      { text: "Campaign scheduling", included: true },
-      { text: "Priority support", included: true },
-    ],
-  },
-  {
-    id: "professional",
-    name: "Professional",
-    price: "$29.99",
-    period: "/month",
-    badge: null,
-    color: "#10B981",
-    features: [
-      { text: "Unlimited discounted variants", included: true },
-      { text: "Unlimited campaigns", included: true },
-      { text: "Everything in Advanced", included: true },
-      { text: "Advanced analytics", included: true },
-      { text: "Dedicated support", included: true },
-    ],
-  },
-];
+// ─── Action ───────────────────────────────────────────────────────────────────
 
-export default function Plans() {
-  const { currentPlanId, campaignCount, managedPricingUrl } =
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { authenticate } = await import("../shopify.server");
+  const { session } = await authenticate.admin(request);
+
+  const formData = await request.formData();
+  const planId = formData.get("planId") as string;
+
+  if (!PLANS[planId as PlanId]) {
+    return json({ error: "Invalid plan selected", redirectUrl: null }, { status: 400 });
+  }
+
+  const appHandle = process.env.SHOPIFY_APP_HANDLE ?? "";
+  const storeHandle = session.shop.replace(/\.myshopify\.com$/, "");
+  const redirectUrl = `https://admin.shopify.com/store/${storeHandle}/charges/${appHandle}/pricing_plans`;
+
+  // Return the URL as JSON — client uses App Bridge to navigate the top frame.
+  // A server-side redirect() lands in the iframe which Shopify blocks (X-Frame-Options: deny).
+  return json({ redirectUrl, error: null });
+};
+
+// ─── Plans Page ───────────────────────────────────────────────────────────────
+
+export default function PlansPage() {
+  const { hasActivePlan, activePlanId, managedPricingUrl } =
     useLoaderData<typeof loader>();
 
-  // Open Shopify's plan picker in the top-level window (escapes the iframe).
-  const openManagedPricing = () => {
-    if (typeof window !== "undefined") {
-      window.top!.location.href = managedPricingUrl;
-    }
-  };
+  const [selected, setSelected] = useState<string | null>(activePlanId ?? null);
+  const fetcher = useFetcher<{ redirectUrl: string | null; error: string | null }>();
+  const planList = Object.values(PLANS);
+  const selectedPlan = planList.find((p) => p.id === selected);
+  const isSubmitting = fetcher.state !== "idle";
 
-  const currentPlan =
-    PLAN_DISPLAY.find((p) => p.id === currentPlanId) || null;
+  // Navigate the top frame out of Shopify's iframe to the pricing page
+  useEffect(() => {
+    if (fetcher.data?.redirectUrl) {
+      window.open(fetcher.data.redirectUrl, "_top");
+    }
+  }, [fetcher.data]);
+
+  function handleActivate() {
+    if (!selected) return;
+    fetcher.submit(
+      { planId: selected },
+      { method: "POST", action: "/app/plans" }
+    );
+  }
 
   return (
-    <Page title="Plans & Pricing">
-      <BlockStack gap="600">
-        {!currentPlan && (
-          <Banner tone="warning">
-            <p>
-              You don't have an active subscription. Choose a plan below to start
-              using SmartSavings.
-            </p>
-          </Banner>
+    <>
+      <style>{`
+        .plans-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          gap: 20px;
+          margin-bottom: 2rem;
+        }
+        .plan-card {
+          border-radius: 16px;
+          padding: 1.5rem;
+          cursor: pointer;
+          position: relative;
+          outline: none;
+          transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .plan-card:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 12px 32px rgba(0,0,0,0.1);
+        }
+        .plans-cta {
+          border: none;
+          border-radius: 99px;
+          padding: 13px 40px;
+          font-size: 15px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: opacity 0.15s, transform 0.1s;
+          letter-spacing: 0.01em;
+        }
+        .plans-cta:active  { transform: scale(0.97); }
+        .plans-cta:disabled { opacity: 0.45; cursor: not-allowed; }
+      `}</style>
+
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "2.5rem 1.5rem" }}>
+
+        {/* Header */}
+        <div style={{ marginBottom: "2.5rem" }}>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: "#111827", margin: "0 0 8px", letterSpacing: "-0.025em" }}>
+            Plans &amp; Billing
+          </h1>
+          <p style={{ fontSize: 15, color: "#6b7280", margin: 0 }}>
+            {hasActivePlan
+              ? `You're on the ${activePlanId ? PLANS[activePlanId]?.name : ""} plan. Upgrade or change any time.`
+              : "Choose a plan to activate your app. Billed securely through Shopify."}
+          </p>
+        </div>
+
+        {/* Active plan banner */}
+        {hasActivePlan && activePlanId && (
+          <div style={{
+            background: "#E1F5EE", border: "1px solid #1D9E75", borderRadius: 12,
+            padding: "12px 20px", marginBottom: "1.5rem",
+            display: "flex", alignItems: "center", gap: 10,
+            fontSize: 14, color: "#085041", fontWeight: 500,
+          }}>
+            <span style={{ fontSize: 18 }}>✓</span>
+            Active plan: <strong>{PLANS[activePlanId]?.name}</strong>. Managed through Shopify billing.
+          </div>
         )}
 
-        {currentPlan && (
-          <Card>
-            <InlineStack align="space-between">
-              <BlockStack>
-                <Text as="h2" variant="bodySm" tone="subdued">
-                  Current plan
-                </Text>
-                <InlineStack gap="200">
-                  <Text as="h2" variant="headingLg" fontWeight="bold">
-                    {currentPlan.name}
-                  </Text>
-                  <Badge tone="success">Active</Badge>
-                </InlineStack>
-              </BlockStack>
-
-              <BlockStack inlineAlign="end">
-                <Text as="h2" variant="bodySm" tone="subdued">
-                  Campaigns used
-                </Text>
-                <Text as="h2" variant="headingSm" fontWeight="bold">
-                  {campaignCount}
-                </Text>
-              </BlockStack>
-            </InlineStack>
-          </Card>
-        )}
-
-        <InlineGrid columns={3} gap="400">
-          {PLAN_DISPLAY.map((plan) => {
-            const isCurrent = plan.id === currentPlanId;
-
+        {/* Plan cards */}
+        <div className="plans-grid" role="radiogroup">
+          {planList.map((plan) => {
+            const isSelected = selected === plan.id;
+            const isActive = activePlanId === plan.id;
             return (
-              <div key={plan.id} style={{ position: "relative" }}>
+              <div
+                key={plan.id}
+                className="plan-card"
+                role="radio"
+                aria-checked={isSelected}
+                tabIndex={0}
+                onClick={() => setSelected(plan.id)}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setSelected(plan.id)}
+                style={{
+                  border: isSelected ? `2.5px solid ${plan.color}` : "1.5px solid #e5e7eb",
+                  background: isSelected ? plan.lightBg : "#fff",
+                }}
+              >
                 {plan.badge && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "-10px",
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      background: plan.color,
-                      color: "#fff",
-                      padding: "4px 12px",
-                      borderRadius: "12px",
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      zIndex: 1,
-                    }}
-                  >
+                  <span style={{
+                    position: "absolute", top: -13, left: "50%", transform: "translateX(-50%)",
+                    background: plan.color, color: "#fff", fontSize: 11, fontWeight: 700,
+                    borderRadius: 99, padding: "3px 14px", whiteSpace: "nowrap",
+                  }}>
                     {plan.badge}
-                  </div>
+                  </span>
+                )}
+                {isActive && (
+                  <span style={{
+                    position: "absolute", top: 12, right: 12,
+                    background: plan.color, color: "#fff", fontSize: 10,
+                    fontWeight: 700, borderRadius: 99, padding: "2px 10px", textTransform: "uppercase",
+                  }}>
+                    Current
+                  </span>
                 )}
 
-                <Card>
-                  <BlockStack gap="400">
-                    <BlockStack inlineAlign="center">
-                      <Text as="h2" variant="headingMd">
-                        {plan.name}
-                      </Text>
-                      <InlineStack gap="100" align="center">
-                        <Text as="h2" variant="headingLg" fontWeight="bold">
-                          {plan.price}
-                        </Text>
-                        <Text as="h2" tone="subdued">
-                          {plan.period}
-                        </Text>
-                      </InlineStack>
-                    </BlockStack>
+                <div style={{ marginBottom: 14 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: plan.color, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    {plan.name}
+                  </p>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                    <span style={{ fontSize: 34, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em" }}>
+                      ${plan.price.toFixed(2)}
+                    </span>
+                    <span style={{ fontSize: 13, color: "#9ca3af" }}>/month</span>
+                  </div>
+                </div>
 
-                    <Divider />
+                <div style={{ borderTop: "1px solid #f3f4f6", paddingTop: 14 }}>
+                  {plan.features.map((f) => (
+                    <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 9 }}>
+                      <span style={{ color: plan.color, fontSize: 13, flexShrink: 0, marginTop: 1, fontWeight: 700 }}>✓</span>
+                      <span style={{ fontSize: 13, color: "#374151" }}>{f}</span>
+                    </div>
+                  ))}
+                </div>
 
-                    <BlockStack gap="200">
-                      {plan.features.map((f, i) => (
-                        <InlineStack key={i} gap="200">
-                          <span style={{ color: f.included ? "#10B981" : "#ccc" }}>
-                            {f.included ? "✓" : "🔒"}
-                          </span>
-                          <Text as="h2" tone={f.included ? undefined : "subdued"}>
-                            {f.included ? (
-                              f.text
-                            ) : (
-                              <span style={{ textDecoration: "line-through" }}>
-                                {f.text}
-                              </span>
-                            )}
-                          </Text>
-                        </InlineStack>
-                      ))}
-                    </BlockStack>
-
-                    <Box paddingBlockStart="200">
-                      {isCurrent ? (
-                        <div
-                          style={{
-                            textAlign: "center",
-                            padding: "10px",
-                            border: `2px solid ${plan.color}`,
-                            borderRadius: "8px",
-                            fontWeight: 700,
-                            color: plan.color,
-                          }}
-                        >
-                          Current Plan
-                        </div>
-                      ) : (
-                        <button
-                          onClick={openManagedPricing}
-                          style={{
-                            width: "100%",
-                            padding: "10px",
-                            background: plan.color,
-                            border: "none",
-                            borderRadius: "8px",
-                            fontWeight: 700,
-                            color: "#fff",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Choose Plan
-                        </button>
-                      )}
-                    </Box>
-                  </BlockStack>
-                </Card>
+                {isSelected && !isActive && (
+                  <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: plan.color }}>● Selected</div>
+                )}
               </div>
             );
           })}
-        </InlineGrid>
-      </BlockStack>
-    </Page>
+        </div>
+
+        {/* CTA footer */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          flexWrap: "wrap", gap: 12, paddingTop: "1rem", borderTop: "1px solid #f3f4f6",
+        }}>
+          <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>
+            🔒 Billed securely through Shopify · Cancel any time
+          </p>
+          <button
+            className="plans-cta"
+            disabled={!selected || isSubmitting || (hasActivePlan && selected === activePlanId)}
+            onClick={handleActivate}
+            style={{
+              background: selectedPlan ? selectedPlan.color : "#e5e7eb",
+              color: selectedPlan ? "#fff" : "#9ca3af",
+            }}
+          >
+            {isSubmitting
+              ? "Redirecting to Shopify…"
+              : hasActivePlan && selected === activePlanId
+              ? "Current plan"
+              : selectedPlan
+              ? hasActivePlan
+                ? `Switch to ${selectedPlan.name} — $${selectedPlan.price.toFixed(2)}/mo`
+                : `Activate ${selectedPlan.name} — $${selectedPlan.price.toFixed(2)}/mo`
+              : "Select a plan"}
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
