@@ -35,7 +35,7 @@ if (host === "localhost") {
 export default defineConfig({
   server: {
     port: Number(process.env.PORT || 3000),
-    allowedHosts: "all",
+    allowedHosts: true,   // was "all" — Vite expects true | string[] | undefined
     hmr: hmrConfig,
     fs: {
       allow: ["app", "node_modules"],
