@@ -98,3 +98,56 @@ model Subscription {
 
   @@index([shop])
 }
+
+model CampaignAnalytics {
+  id                  String   @id @default(cuid())
+  shop                String
+
+  // Snapshot of campaign data at time of recording (persists after deletion)
+  campaignId          String   // original Campaign.id (may no longer exist)
+  campaignName        String
+  campaignType        String   // quantity_discount, bulk_price, cart_goal, buy_x_get_y, shipping_discount
+  campaignStatus      String   // active, expired, paused, deleted
+  discountType        String   // percentage, fixed_amount, free_shipping
+  discountValue       Float?
+  startDate           DateTime?
+  endDate             DateTime?
+
+  // Product/collection targeting snapshot
+  appliesTo           String   @default("all")
+  productIds          String?  // JSON array of {id, title, image} objects
+  collectionIds       String?  // JSON array of {id, title} objects
+
+  // Performance metrics
+  totalOrders         Int      @default(0)
+  totalRevenue        Float    @default(0)
+  totalDiscountGiven  Float    @default(0)
+  totalFreeShipping   Float    @default(0)  // total shipping value waived
+  totalItemsDiscounted Int     @default(0)
+  averageOrderValue   Float    @default(0)
+  conversionRate      Float    @default(0)  // percentage
+
+  // Tier breakdown (for quantity/bulk discount) — JSON array of {qty, discount, usageCount}
+  tierBreakdown       String?
+
+  // Buy X Get Y breakdown — JSON {buyQty, getQty, usageCount, freeItemsGiven}
+  bxgyBreakdown       String?
+
+  // Shipping discount breakdown — JSON {domestic, international, totalOrders}
+  shippingBreakdown   String?
+
+  // Top products by discount usage — JSON array of {productId, title, ordersCount, discountTotal}
+  topProducts         String?
+
+  // Shopify discount node id for reference
+  shopifyDiscountId   String?
+
+  isDeleted           Boolean  @default(false)  // soft delete for analytics records
+  deletedAt           DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([shop])
+  @@index([shop, campaignId])
+  @@index([shop, isDeleted])
+}
