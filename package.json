@@ -33,14 +33,14 @@
     "@shopify/shopify-app-session-storage-prisma": "^5.0.0",
     "isbot": "^5.1.0",
     "prisma": "^5.11.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
     "vite-tsconfig-paths": "^4.3.1"
   },
   "devDependencies": {
     "@remix-run/eslint-config": "^2.7.1",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "eslint": "^8.42.0",
     "typescript": "^5.2.2",
     "vite": "^5.1.3"
