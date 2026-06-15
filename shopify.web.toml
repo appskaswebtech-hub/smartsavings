@@ -1,0 +1,9 @@
+[commands]
+dev = "npx remix vite:dev"
+build = "npx remix vite:build"
+
+[dev]
+port = 3000
+
+[[auth]]
+type = "cookie"

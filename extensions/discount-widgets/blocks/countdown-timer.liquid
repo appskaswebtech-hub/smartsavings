@@ -1,0 +1,121 @@
+{% comment %}
+  SmartDiscounts - Countdown Timer Block
+  Shows a sale countdown banner on the storefront
+{% endcomment %}
+
+{{ 'discount-widgets.css' | asset_url | stylesheet_tag }}
+
+{% if block.settings.enabled %}
+  {% assign now = 'now' | date: '%s' | plus: 0 %}
+  {% assign end_time = block.settings.end_date | date: '%s' | plus: 0 %}
+  {% assign show_timer = false %}
+  {% if end_time > now %}
+    {% assign show_timer = true %}
+  {% endif %}
+
+  {% if show_timer or block.settings.always_show %}
+    <div
+      class="sd-countdown-banner sd-countdown-{{ block.settings.position }}"
+      id="sd-countdown-{{ block.id }}"
+      data-end-date="{{ block.settings.end_date | date: '%Y-%m-%dT%H:%M:%S' }}"
+      data-type="{{ block.settings.timer_type }}"
+      style="
+        background: {% if block.settings.use_gradient %}linear-gradient({{ block.settings.gradient_angle }}deg, {{ block.settings.bg_color_1 }}, {{ block.settings.bg_color_2 }}){% else %}{{ block.settings.bg_color_1 }}{% endif %};
+        border-radius: {{ block.settings.border_radius }}px;
+        {% if block.settings.sticky %}position: sticky; top: 0; z-index: 999;{% endif %}
+      "
+    >
+      <div class="sd-countdown-content">
+        <span class="sd-countdown-icon">🔥</span>
+        <span class="sd-countdown-title" style="color: {{ block.settings.title_color }};">
+          {{ block.settings.title }}
+        </span>
+
+        <div class="sd-countdown-digits">
+          {% if block.settings.show_days %}
+            <div class="sd-countdown-unit">
+              <span class="sd-countdown-num" style="background: {{ block.settings.number_color }}; color: {{ block.settings.box_text_color }};" data-unit="days">00</span>
+              <span class="sd-countdown-label" style="color: {{ block.settings.box_text_color }};">Day</span>
+            </div>
+          {% endif %}
+          {% if block.settings.show_hours %}
+            <div class="sd-countdown-unit">
+              <span class="sd-countdown-num" style="background: {{ block.settings.number_color }}; color: {{ block.settings.box_text_color }};" data-unit="hours">00</span>
+              <span class="sd-countdown-label" style="color: {{ block.settings.box_text_color }};">Hr</span>
+            </div>
+          {% endif %}
+          {% if block.settings.show_minutes %}
+            <div class="sd-countdown-unit">
+              <span class="sd-countdown-num" style="background: {{ block.settings.number_color }}; color: {{ block.settings.box_text_color }};" data-unit="minutes">00</span>
+              <span class="sd-countdown-label" style="color: {{ block.settings.box_text_color }};">Min</span>
+            </div>
+          {% endif %}
+          {% if block.settings.show_seconds %}
+            <div class="sd-countdown-unit">
+              <span class="sd-countdown-num" style="background: {{ block.settings.number_color }}; color: {{ block.settings.box_text_color }};" data-unit="seconds">00</span>
+              <span class="sd-countdown-label" style="color: {{ block.settings.box_text_color }};">Sec</span>
+            </div>
+          {% endif %}
+        </div>
+
+        {% unless block.settings.hide_cta %}
+          <a
+            href="{{ block.settings.cta_url }}"
+            class="sd-countdown-cta"
+            style="background: {{ block.settings.cta_bg }}; color: {{ block.settings.cta_text_color }};"
+          >
+            {{ block.settings.cta_text }}
+          </a>
+        {% endunless %}
+      </div>
+
+      {% unless block.settings.hide_close %}
+        <button class="sd-countdown-close" style="color: {{ block.settings.close_color }};" onclick="this.closest('.sd-countdown-banner').style.display='none'">✕</button>
+      {% endunless %}
+    </div>
+  {% endif %}
+{% endif %}
+
+<script src="{{ 'discount-widgets.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Countdown Timer",
+  "target": "section",
+  "settings": [
+    { "type": "checkbox", "id": "enabled", "label": "Enable countdown timer", "default": true },
+    { "type": "select", "id": "timer_type", "label": "Timer type", "options": [
+      { "value": "ends_in", "label": "Sale ends in" },
+      { "value": "starts_in", "label": "Sale starts in" }
+    ], "default": "ends_in" },
+    { "type": "text", "id": "title", "label": "Title text", "default": "Sale ends in" },
+    { "type": "text", "id": "end_date", "label": "End date (YYYY-MM-DD HH:MM)", "default": "2026-12-31 23:59" },
+    { "type": "select", "id": "position", "label": "Position", "options": [
+      { "value": "top", "label": "Top" },
+      { "value": "bottom", "label": "Bottom" }
+    ], "default": "top" },
+    { "type": "checkbox", "id": "sticky", "label": "Sticky banner", "default": false },
+    { "type": "checkbox", "id": "always_show", "label": "Always show (even if expired)", "default": false },
+    { "type": "checkbox", "id": "show_days", "label": "Show days", "default": true },
+    { "type": "checkbox", "id": "show_hours", "label": "Show hours", "default": true },
+    { "type": "checkbox", "id": "show_minutes", "label": "Show minutes", "default": true },
+    { "type": "checkbox", "id": "show_seconds", "label": "Show seconds", "default": true },
+    { "type": "checkbox", "id": "hide_cta", "label": "Hide CTA button", "default": false },
+    { "type": "text", "id": "cta_text", "label": "CTA text", "default": "Shop now" },
+    { "type": "url", "id": "cta_url", "label": "CTA link" },
+    { "type": "checkbox", "id": "hide_close", "label": "Hide close button", "default": false },
+    { "type": "header", "content": "Colors" },
+    { "type": "checkbox", "id": "use_gradient", "label": "Use gradient background", "default": true },
+    { "type": "color", "id": "bg_color_1", "label": "Background color 1", "default": "#252727" },
+    { "type": "color", "id": "bg_color_2", "label": "Background color 2 (gradient)", "default": "#4C4E63" },
+    { "type": "range", "id": "gradient_angle", "label": "Gradient angle", "min": 0, "max": 360, "step": 10, "default": 160, "unit": "°" },
+    { "type": "range", "id": "border_radius", "label": "Border radius", "min": 0, "max": 30, "step": 1, "default": 8, "unit": "px" },
+    { "type": "color", "id": "title_color", "label": "Title color", "default": "#FFFFFF" },
+    { "type": "color", "id": "number_color", "label": "Number background", "default": "#F14262" },
+    { "type": "color", "id": "box_text_color", "label": "Number text color", "default": "#FFFFFF" },
+    { "type": "color", "id": "cta_bg", "label": "CTA background", "default": "#F14262" },
+    { "type": "color", "id": "cta_text_color", "label": "CTA text color", "default": "#FFFFFF" },
+    { "type": "color", "id": "close_color", "label": "Close button color", "default": "#D5D5E5" }
+  ]
+}
+{% endschema %}

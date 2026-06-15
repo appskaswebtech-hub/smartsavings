@@ -1,0 +1,213 @@
+{% comment %}
+  SmartDiscounts - Cart Goal Widget
+  Stepper visualization — each tier is a milestone dot on a progress line.
+{% endcomment %}
+
+{{ 'discount-widgets.css' | asset_url | stylesheet_tag }}
+
+{% if block.settings.enabled %}
+  {% assign cart_total_cents = cart.total_price %}
+  {% assign cart_total = cart_total_cents | divided_by: 100.0 %}
+
+  <div
+    id="sd-cartgoal-{{ block.id }}"
+    data-cart-total="{{ cart_total }}"
+    data-sym="{{ cart.currency.symbol }}"
+    data-shop="{{ shop.permanent_domain }}"
+    style="border:1px solid {{ block.settings.border_color }};border-radius:{{ block.settings.border_radius }}px;overflow:hidden;margin:16px 0;display:none;"
+  >
+    <div style="background:{{ block.settings.header_bg }};color:{{ block.settings.text_color }};padding:12px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:18px;">🎯</span>
+      {{ block.settings.header_title }}
+    </div>
+    <div id="sd-goal-stepper-{{ block.id }}" style="padding:16px 20px 8px;"></div>
+    <div id="sd-goal-message-{{ block.id }}" style="padding:4px 20px 16px;font-size:13px;font-weight:600;text-align:center;"></div>
+  </div>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var B         = '{{ block.id }}';
+    var box       = document.getElementById('sd-cartgoal-' + B);
+    var stepperEl = document.getElementById('sd-goal-stepper-' + B);
+    var messageEl = document.getElementById('sd-goal-message-' + B);
+    if (!box) return;
+
+    var cartTotal     = parseFloat(box.dataset.cartTotal) || 0;
+    var S             = box.dataset.sym || '$';
+    var activeColor   = '{{ block.settings.active_color }}';
+    var inactiveColor = '{{ block.settings.inactive_color }}';
+    var textColor     = '{{ block.settings.table_text_color }}';
+
+    function fmtAmount(n) {
+      var s = parseFloat(n).toFixed(2).split('.');
+      s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      return S + (s[1] === '00' ? s[0] : s.join('.'));
+    }
+
+    function render(tiers) {
+      tiers.sort(function(a, b) { return a.amount - b.amount; });
+      var N   = tiers.length;
+      var max = tiers[N - 1].amount;
+
+      var activeTier = null, nextTier = null;
+      for (var i = N - 1; i >= 0; i--) {
+        if (cartTotal >= tiers[i].amount) { activeTier = tiers[i]; break; }
+      }
+      for (var i = 0; i < N; i++) {
+        if (cartTotal < tiers[i].amount) { nextTier = tiers[i]; break; }
+      }
+
+      var fillPct  = Math.min(100, (cartTotal / max) * 100);
+      var dotSize  = 22;
+      var dotHalf  = dotSize / 2;
+      var html     = '';
+
+      /* ── Discount badges above dots ── */
+      html += '<div style="position:relative;height:24px;margin:0 ' + dotHalf + 'px 4px;">';
+      for (var i = 0; i < N; i++) {
+        var pct     = tiers[i].amount / max * 100;
+        var reached = cartTotal >= tiers[i].amount;
+        html += '<div style="position:absolute;left:' + pct + '%;transform:translateX(-50%);white-space:nowrap;">';
+        html += '<span style="display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;'
+              + 'background:' + (reached ? activeColor : inactiveColor) + ';'
+              + 'color:' + (reached ? '#fff' : '#9ca3af') + ';'
+              + 'transition:background 0.4s,color 0.4s;">'
+              + tiers[i].discount + '% off</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      /* ── Track: background line + fill line + dots ── */
+      html += '<div style="position:relative;height:' + dotSize + 'px;margin:0 ' + dotHalf + 'px;">';
+
+      /* bg line */
+      html += '<div style="position:absolute;top:50%;left:0;right:0;height:3px;border-radius:3px;background:#e5e7eb;transform:translateY(-50%);"></div>';
+
+      /* fill line */
+      html += '<div style="position:absolute;top:50%;left:0;width:' + fillPct + '%;height:3px;border-radius:3px;background:' + activeColor + ';transform:translateY(-50%);transition:width 0.6s cubic-bezier(.4,0,.2,1);"></div>';
+
+      /* dots */
+      for (var i = 0; i < N; i++) {
+        var pct     = tiers[i].amount / max * 100;
+        var reached = cartTotal >= tiers[i].amount;
+        var isHead  = reached && (i === N - 1 || cartTotal < tiers[i + 1].amount);
+
+        html += '<div style="'
+              + 'position:absolute;top:50%;left:' + pct + '%;'
+              + 'transform:translate(-50%,-50%);'
+              + 'width:' + dotSize + 'px;height:' + dotSize + 'px;border-radius:50%;'
+              + 'background:' + (reached ? activeColor : '#fff') + ';'
+              + 'border:2px solid ' + (reached ? activeColor : '#d1d5db') + ';'
+              + 'display:flex;align-items:center;justify-content:center;'
+              + 'box-shadow:' + (isHead ? '0 0 0 5px ' + activeColor + '30' : reached ? '0 2px 6px rgba(0,0,0,.15)' : 'none') + ';'
+              + 'transition:all 0.4s;z-index:1;">';
+
+        if (reached) {
+          /* checkmark svg */
+          html += '<svg width="11" height="11" viewBox="0 0 12 12" fill="none">'
+                + '<path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'
+                + '</svg>';
+        } else {
+          html += '<div style="width:6px;height:6px;border-radius:50%;background:#d1d5db;"></div>';
+        }
+
+        html += '</div>';
+      }
+
+      html += '</div>'; /* end track */
+
+      /* ── Amount labels below dots ── */
+      html += '<div style="position:relative;height:18px;margin:6px ' + dotHalf + 'px 0;">';
+      for (var i = 0; i < N; i++) {
+        var pct     = tiers[i].amount / max * 100;
+        var reached = cartTotal >= tiers[i].amount;
+        html += '<div style="'
+              + 'position:absolute;left:' + pct + '%;transform:translateX(-50%);'
+              + 'font-size:11px;font-weight:' + (reached ? '700' : '400') + ';'
+              + 'color:' + (reached ? activeColor : '#9ca3af') + ';'
+              + 'white-space:nowrap;transition:color 0.4s;">'
+              + fmtAmount(tiers[i].amount) + '</div>';
+      }
+      html += '</div>';
+
+      stepperEl.innerHTML = html;
+
+      /* ── Progress message ── */
+      var msg = '';
+      if (!activeTier && nextTier) {
+        msg = 'Add <b style="color:' + activeColor + ';">' + fmtAmount(nextTier.amount - cartTotal) + '</b> more to unlock <b>' + nextTier.discount + '% off</b>!';
+      } else if (activeTier && nextTier) {
+        msg = '<span style="color:' + activeColor + ';">✅ Saving ' + activeTier.discount + '%</span> — add <b style="color:' + activeColor + ';">' + fmtAmount(nextTier.amount - cartTotal) + '</b> more for <b>' + nextTier.discount + '% off</b>!';
+      } else if (activeTier) {
+        msg = '<span style="color:' + activeColor + ';">🎉 Maximum discount unlocked — saving ' + activeTier.discount + '%!</span>';
+      }
+      messageEl.innerHTML = '<span style="color:' + textColor + ';">' + msg + '</span>';
+
+      box.style.display = 'block';
+    }
+
+    var activeTiers = null;
+
+    function refreshAndRender() {
+      fetch('/cart.js', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(cart) {
+          var newTotal = (cart.total_price || 0) / 100;
+          if (newTotal !== cartTotal && activeTiers) {
+            cartTotal = newTotal;
+            render(activeTiers);
+          }
+        })
+        .catch(function() {});
+    }
+
+    /* Initial load */
+    fetch('/apps/smartdiscounts?shop=' + encodeURIComponent(box.dataset.shop || ''))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var campaigns = data.campaigns || [];
+        var matched = null;
+        for (var i = 0; i < campaigns.length; i++) {
+          if (campaigns[i].type === 'cart_goal' && campaigns[i].status === 'active') {
+            matched = campaigns[i]; break;
+          }
+        }
+        if (matched && matched.tiers && matched.tiers.length > 0) {
+          var tiers = matched.tiers.map(function(t) {
+            return {
+              amount:   parseFloat(t.amount || t.spend || 0),
+              discount: parseFloat(t.discount || 0),
+            };
+          }).filter(function(t) {
+            return !isNaN(t.amount) && !isNaN(t.discount) && t.amount > 0;
+          });
+          if (tiers.length > 0) {
+            activeTiers = tiers;
+            render(tiers);
+            setInterval(refreshAndRender, 2000);
+          }
+        }
+      })
+      .catch(function() {});
+  });
+  </script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Cart Goal Discounts",
+  "target": "section",
+  "settings": [
+    { "type": "checkbox", "id": "enabled", "label": "Enable cart goal widget", "default": true },
+    { "type": "text", "id": "header_title", "label": "Header title", "default": "Spend more, Save more!" },
+    { "type": "header", "content": "Styles" },
+    { "type": "color", "id": "text_color", "label": "Header text color", "default": "#000000" },
+    { "type": "color", "id": "header_bg", "label": "Header background", "default": "#F5F5F5" },
+    { "type": "color", "id": "table_text_color", "label": "Message text color", "default": "#333333" },
+    { "type": "color", "id": "border_color", "label": "Border color", "default": "#E0E0E0" },
+    { "type": "color", "id": "active_color", "label": "Active / reached color", "default": "#10B981" },
+    { "type": "color", "id": "inactive_color", "label": "Inactive badge color", "default": "#e5e7eb" },
+    { "type": "range", "id": "border_radius", "label": "Border radius", "min": 0, "max": 20, "step": 1, "default": 8, "unit": "px" }
+  ]
+}
+{% endschema %}

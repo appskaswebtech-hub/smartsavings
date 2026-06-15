@@ -1,0 +1,275 @@
+{% comment %}
+  SmartDiscounts - Saving on Cart
+  Debug version with visible output to diagnose price replacement
+{% endcomment %}
+
+{{ 'discount-widgets.css' | asset_url | stylesheet_tag }}
+
+{% if block.settings.enabled and cart.item_count > 0 %}
+  {% assign has_discount = false %}
+  {% assign total_savings_cents = 0 %}
+  {% for item in cart.items %}
+    {% assign item_diff = item.original_line_price | minus: item.final_line_price %}
+    {% if item_diff > 0 %}{% assign has_discount = true %}{% assign total_savings_cents = total_savings_cents | plus: item_diff %}{% endif %}
+  {% endfor %}
+  {% for discount in cart.cart_level_discount_applications %}
+    {% assign has_discount = true %}
+    {% assign total_savings_cents = total_savings_cents | plus: discount.total_allocated_amount %}
+  {% endfor %}
+
+  {% if has_discount %}
+    {%- comment -%} Savings Widget {%- endcomment -%}
+    <div id="sd-savings-widget" style="border:1px solid {{ block.settings.border_color }};border-radius:{{ block.settings.border_radius }}px;overflow:hidden;margin:16px 0;">
+      <div style="background:{{ block.settings.header_bg }};color:{{ block.settings.header_text_color }};padding:10px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">💰</span>{{ block.settings.header_title }}
+      </div>
+      {% for item in cart.items %}
+        {% assign item_orig = item.original_line_price %}
+        {% assign item_final = item.final_line_price %}
+        {% assign item_diff = item_orig | minus: item_final %}
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid rgba(0,0,0,0.06);font-size:13px;">
+          {% if item.image %}<img src="{{ item.image | image_url: width: 60 }}" style="width:44px;height:44px;border-radius:6px;object-fit:cover;flex-shrink:0;" />{% endif %}
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:12px;">{{ item.product.title }}</div>
+            <div style="font-size:11px;color:#999;margin-top:2px;">Qty: {{ item.quantity }}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            {% if item_diff > 0 %}
+              <s style="color:#999;font-size:11px;">{{ item_orig | money }}</s>
+              <div style="color:{{ block.settings.saving_text_color }};font-weight:700;">{{ item_final | money }}</div>
+            {% else %}
+              <div style="font-weight:600;">{{ item_final | money }}</div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+      <div style="border-top:2px solid {{ block.settings.saving_text_color }};background:rgba(16,185,129,0.04);padding:10px 16px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;">
+          <span>{{ block.settings.total_text }}</span>
+          <s style="color:#999;">{{ cart.original_total_price | money }}</s>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:{{ block.settings.saving_text_color }};margin-bottom:6px;">
+          <span>{{ block.settings.saving_text }}</span>
+          <span>-{{ total_savings_cents | money }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;">
+          <span>Subtotal</span><span>{{ cart.total_price | money }}</span>
+        </div>
+      </div>
+    </div>
+
+    {%- comment -%} Debug Panel {%- endcomment -%}
+    {% if block.settings.show_debug %}
+    <div id="sd-debug" style="border:2px solid red;padding:12px;margin:12px 0;font-family:monospace;font-size:11px;background:#fff8f8;border-radius:8px;">
+      <b style="color:red;">🔧 SmartDiscounts Debug (disable in block settings)</b>
+      <div id="sd-debug-log" style="margin-top:8px;white-space:pre-wrap;"></div>
+    </div>
+    {% endif %}
+
+    <script>
+    (function() {
+      var debugEl = document.getElementById('sd-debug-log');
+      function log(msg) {
+        if (debugEl) debugEl.textContent += msg + '\n';
+        console.log('[SD] ' + msg);
+      }
+
+      log('Script started');
+
+      // Cart data from Liquid
+      var items = [
+        {% for item in cart.items %}{
+          title: {{ item.product.title | json }},
+          origPrice: {{ item.original_price }},
+          origLine: {{ item.original_line_price }},
+          finalPrice: {{ item.final_price }},
+          finalLine: {{ item.final_line_price }},
+          qty: {{ item.quantity }}
+        }{% unless forloop.last %},{% endunless %}{% endfor %}
+      ];
+      var cartDiscount = {{ total_savings_cents | default: 0 }};
+      var cartOrigTotal = {{ cart.original_total_price }};
+      var hasCartDiscount = {% if cart.cart_level_discount_applications.size > 0 %}true{% else %}false{% endif %};
+
+      log('Items: ' + items.length + ', Cart discount: ' + cartDiscount + ', Has cart-level: ' + hasCartDiscount);
+
+      // Calc per-item discounts for cart-level
+      items.forEach(function(item) {
+        if (hasCartDiscount && item.origLine === item.finalLine && cartOrigTotal > 0) {
+          var share = Math.round(cartDiscount * item.origLine / cartOrigTotal);
+          item.finalLine = item.origLine - share;
+          item.finalPrice = Math.round(item.finalLine / item.qty);
+          item.hasDiscount = true;
+        } else {
+          item.hasDiscount = item.origLine !== item.finalLine;
+        }
+        log('Item: ' + item.title + ' | Orig: ' + item.origLine + ' → Final: ' + item.finalLine + ' | Discount: ' + item.hasDiscount);
+      });
+
+      function fmt(cents) {
+        var s = (cents / 100).toFixed(2).split('.');
+        s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        return '$' + s.join('.');
+      }
+
+      function tryUpdate() {
+        log('\n--- Scan attempt ---');
+
+        // Try to find cart rows
+        var rowSelectors = [
+          'cart-items table tbody tr',
+          'table.cart-items tbody tr',
+          '.cart-item',
+          'form[action="/cart"] table tbody tr',
+          'form[action="/cart"] tr.cart-item',
+          '.cart__items tr',
+          'table.cart tbody tr',
+        ];
+
+        var rows = null;
+        var usedSelector = '';
+        for (var i = 0; i < rowSelectors.length; i++) {
+          var found = document.querySelectorAll(rowSelectors[i]);
+          log('Selector "' + rowSelectors[i] + '" → ' + found.length + ' rows');
+          if (found.length > 0 && !rows) {
+            rows = found;
+            usedSelector = rowSelectors[i];
+          }
+        }
+
+        if (!rows || rows.length === 0) {
+          log('❌ No cart rows found!');
+          return false;
+        }
+
+        log('✅ Using: "' + usedSelector + '" (' + rows.length + ' rows)');
+
+        var success = false;
+        items.forEach(function(item, idx) {
+          if (!item.hasDiscount) return;
+          if (idx >= rows.length) { log('Row ' + idx + ' not found'); return; }
+
+          var row = rows[idx];
+          log('\nRow ' + idx + ': ' + row.tagName + '.' + row.className);
+
+          // Log all child elements with their text
+          var children = row.querySelectorAll('*');
+          var priceElements = [];
+          for (var c = 0; c < children.length; c++) {
+            var child = children[c];
+            if (child.tagName === 'SCRIPT' || child.tagName === 'STYLE') continue;
+            var t = (child.innerText || child.textContent || '').trim();
+            if (t && t.match(/\$[\d,]+\.\d{2}/)) {
+              var hasKids = child.querySelectorAll('*').length;
+              priceElements.push({ el: child, text: t, tag: child.tagName, cls: child.className, kids: hasKids });
+            }
+          }
+
+          log('Price-like elements in row: ' + priceElements.length);
+          priceElements.forEach(function(pe) {
+            log('  <' + pe.tag + ' class="' + pe.cls + '"> children=' + pe.kids + ' text="' + pe.text.substring(0, 50) + '"');
+          });
+
+          // Find the BEST unit price element (fewest children, in details area)
+          var unitEl = null;
+          var detailArea = row.querySelector('.cart-item__details, td:nth-child(1), td:nth-child(2)');
+          if (detailArea) {
+            var candidates = detailArea.querySelectorAll('*');
+            for (var c = 0; c < candidates.length; c++) {
+              var t = (candidates[c].innerText || candidates[c].textContent || '').trim();
+              if (t.match(/^\$[\d,]+\.\d{2}$/) && candidates[c].children.length === 0) {
+                unitEl = candidates[c];
+                break;
+              }
+            }
+          }
+
+          // Find the BEST total element (in totals area)
+          var totalEl = null;
+          var totalArea = row.querySelector('.cart-item__totals, td:last-child');
+          if (totalArea) {
+            var candidates = totalArea.querySelectorAll('*');
+            for (var c = 0; c < candidates.length; c++) {
+              var t = (candidates[c].innerText || candidates[c].textContent || '').trim();
+              if (t.match(/^\$[\d,]+\.\d{2}$/) && candidates[c].children.length === 0) {
+                totalEl = candidates[c];
+                break;
+              }
+            }
+          }
+
+          log('Unit el found: ' + !!unitEl + (unitEl ? ' → "' + unitEl.textContent.trim() + '"' : ''));
+          log('Total el found: ' + !!totalEl + (totalEl ? ' → "' + totalEl.textContent.trim() + '"' : ''));
+
+          // Apply strikethrough + new price
+          if (totalEl && !totalEl.dataset.sdDone) {
+            totalEl.dataset.sdDone = '1';
+            totalEl.style.textDecoration = 'line-through';
+            totalEl.style.color = '#999';
+            totalEl.style.fontSize = '0.85em';
+            var newTotal = document.createElement('div');
+            newTotal.style.fontWeight = '700';
+            newTotal.style.fontSize = '1.1em';
+            newTotal.style.color = '#000';
+            newTotal.textContent = fmt(item.finalLine);
+            totalEl.parentNode.insertBefore(newTotal, totalEl.nextSibling);
+            log('✅ Total updated: ' + fmt(item.origLine) + ' → ' + fmt(item.finalLine));
+            success = true;
+          }
+
+          if (unitEl && !unitEl.dataset.sdDone) {
+            unitEl.dataset.sdDone = '1';
+            unitEl.style.textDecoration = 'line-through';
+            unitEl.style.color = '#999';
+            var newUnit = document.createElement('span');
+            newUnit.style.fontWeight = '700';
+            newUnit.style.marginLeft = '8px';
+            newUnit.style.color = '#000';
+            newUnit.style.textDecoration = 'none';
+            newUnit.textContent = fmt(item.finalPrice);
+            unitEl.parentNode.insertBefore(newUnit, unitEl.nextSibling);
+            log('✅ Unit updated: ' + fmt(item.origPrice) + ' → ' + fmt(item.finalPrice));
+            success = true;
+          }
+        });
+
+        return success;
+      }
+
+      // Try repeatedly
+      var attempts = 0;
+      var interval = setInterval(function() {
+        attempts++;
+        log('Attempt #' + attempts);
+        var ok = tryUpdate();
+        if (ok || attempts >= 20) {
+          clearInterval(interval);
+          log(ok ? '🎉 Done!' : '❌ Failed after 20 attempts');
+        }
+      }, 400);
+    })();
+    </script>
+  {% endif %}
+{% endif %}
+
+{% schema %}
+{
+  "name": "Saving on Cart",
+  "target": "section",
+  "settings": [
+    { "type": "checkbox", "id": "enabled", "label": "Enable saving on cart", "default": true },
+    { "type": "checkbox", "id": "show_debug", "label": "Show debug panel (turn off in production)", "default": true },
+    { "type": "text", "id": "header_title", "label": "Header", "default": "Your Savings" },
+    { "type": "text", "id": "total_text", "label": "Total label", "default": "Original total" },
+    { "type": "text", "id": "saving_text", "label": "Saving label", "default": "You save" },
+    { "type": "checkbox", "id": "show_border", "label": "Border around savings", "default": true },
+    { "type": "header", "content": "Colors" },
+    { "type": "color", "id": "header_bg", "label": "Header background", "default": "#F5F5F5" },
+    { "type": "color", "id": "header_text_color", "label": "Header text color", "default": "#000000" },
+    { "type": "color", "id": "total_text_color", "label": "Total text color", "default": "#666666" },
+    { "type": "color", "id": "saving_text_color", "label": "Saving text color", "default": "#10B981" },
+    { "type": "color", "id": "border_color", "label": "Border color", "default": "#E0E0E0" },
+    { "type": "range", "id": "border_radius", "label": "Border radius", "min": 0, "max": 20, "step": 1, "default": 8, "unit": "px" }
+  ]
+}
+{% endschema %}

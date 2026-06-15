@@ -1,0 +1,281 @@
+{% comment %}
+  SmartDiscounts - Buy X Get Y
+  Floating gift button + reward popup
+{% endcomment %}
+
+{{ 'discount-widgets.css' | asset_url | stylesheet_tag }}
+
+{% if block.settings.enabled %}
+
+{%- comment -%} === FLOATING BUTTON === {%- endcomment -%}
+<div
+  id="sd-fab-{{ block.id }}"
+  style="
+    position:fixed;bottom:24px;{{ block.settings.fab_position }}:24px;
+    width:{{ block.settings.fab_size }}px;height:{{ block.settings.fab_size }}px;
+    border-radius:{{ block.settings.fab_radius }}px;
+    background:{{ block.settings.fab_bg }};
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;z-index:99998;
+    box-shadow:0 4px 16px rgba(0,0,0,0.25);
+    transition:transform 0.2s;
+  "
+>
+  <span style="font-size:{{ block.settings.fab_size | divided_by: 2 }}px;">🎁</span>
+  {% unless block.settings.hide_fab_close %}
+  <div
+    id="sd-fab-close-{{ block.id }}"
+    style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#fff;color:#999;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;border:1px solid #ddd;box-shadow:0 1px 3px rgba(0,0,0,0.1);"
+  >✕</div>
+  {% endunless %}
+</div>
+
+{%- comment -%} === POPUP === {%- endcomment -%}
+<div
+  id="sd-popup-{{ block.id }}"
+  style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:none;align-items:center;justify-content:center;"
+>
+  <div style="background:#fff;border-radius:12px;max-width:560px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+
+    {%- comment -%} Header {%- endcomment -%}
+    <div style="background:{{ block.settings.header_bg }};color:#fff;padding:16px 20px;border-radius:12px 12px 0 0;position:relative;">
+      <div style="font-size:15px;font-weight:700;margin-bottom:4px;padding-right:30px;">{{ block.settings.popup_title }}</div>
+      <div style="font-size:12px;opacity:0.8;">{{ block.settings.popup_subtitle }}</div>
+      <button id="sd-popup-close-{{ block.id }}" style="position:absolute;top:12px;right:14px;background:none;border:none;color:#fff;font-size:22px;cursor:pointer;opacity:0.7;line-height:1;">&times;</button>
+    </div>
+
+    {%- comment -%} Info {%- endcomment -%}
+    <div style="padding:8px 20px;font-size:12px;color:#666;background:#fafafa;border-bottom:1px solid #eee;">
+      🎁 Select {{ block.settings.free_qty }} free product{{ block.settings.free_qty | plus: 0 | at_most: 1 | at_least: 1 }}(s) to add to your cart
+    </div>
+
+    {%- comment -%} Products {%- endcomment -%}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;padding:16px;">
+      {% assign gift_handle = block.settings.gift_collection %}
+      {% if gift_handle != blank and collections[gift_handle].products.size > 0 %}
+        {% for product in collections[gift_handle].products limit: 6 %}
+          <div style="border:1px solid #e0e0e0;border-radius:10px;padding:10px;text-align:center;position:relative;background:#fff;transition:border-color 0.2s;" class="sd-gift-card">
+            <div style="position:absolute;top:6px;right:6px;background:{{ block.settings.badge_color }};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">
+              {% if block.settings.discount_percent >= 100 %}FREE{% else %}-{{ block.settings.discount_percent }}%{% endif %}
+            </div>
+            {% if product.featured_image %}
+              <img src="{{ product.featured_image | image_url: width: 200 }}" alt="{{ product.title }}" loading="lazy" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;">
+            {% else %}
+              <div style="width:100%;height:100px;background:#f0f0f0;border-radius:6px;margin-bottom:8px;"></div>
+            {% endif %}
+            <div style="font-size:12px;font-weight:600;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ product.title }}</div>
+            <div style="font-size:12px;margin-bottom:8px;">
+              {% if block.settings.discount_percent >= 100 %}
+                <span style="color:{{ block.settings.primary_color }};font-weight:700;">FREE</span>
+                <s style="color:#999;margin-left:4px;">{{ product.price | money }}</s>
+              {% else %}
+                {% assign dm = 100 | minus: block.settings.discount_percent %}
+                {% assign dp = product.price | times: dm | divided_by: 100 %}
+                <span style="color:{{ block.settings.primary_color }};font-weight:700;">{{ dp | money }}</span>
+                <s style="color:#999;margin-left:4px;">{{ product.price | money }}</s>
+              {% endif %}
+            </div>
+            {% if product.variants.size > 1 %}
+              <select class="sd-variant-select" style="width:100%;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:11px;margin-bottom:6px;">
+                {% for variant in product.variants %}
+                  <option value="{{ variant.id }}">{{ variant.title }}</option>
+                {% endfor %}
+              </select>
+            {% endif %}
+            <button
+              class="sd-select-btn"
+              data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+              data-product-title="{{ product.title | escape }}"
+              style="width:100%;padding:8px;border:none;border-radius:6px;background:{{ block.settings.primary_color }};color:#fff;font-weight:700;font-size:12px;cursor:pointer;transition:all 0.2s;"
+            >
+              {{ block.settings.select_text }}
+            </button>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div style="grid-column:1/-1;text-align:center;padding:30px;color:#999;">
+          <div style="font-size:28px;margin-bottom:8px;">🎁</div>
+          <div style="font-size:14px;font-weight:600;margin-bottom:4px;">No gift collection configured</div>
+          <div style="font-size:12px;">In the Theme Editor, click this block and select a "Gift products collection" in the settings panel on the right.</div>
+        </div>
+      {% endif %}
+    </div>
+
+    {%- comment -%} Actions {%- endcomment -%}
+    <div style="display:flex;gap:10px;padding:16px;border-top:1px solid #eee;">
+      {% unless block.settings.hide_continue %}
+        <button id="sd-continue-{{ block.id }}" style="flex:1;padding:12px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;background:#fff;border:2px solid {{ block.settings.primary_color }};color:{{ block.settings.primary_color }};transition:opacity 0.2s;">
+          {{ block.settings.continue_text }}
+        </button>
+      {% endunless %}
+      <button id="sd-addcart-{{ block.id }}" style="flex:1;padding:12px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;background:{{ block.settings.primary_color }};color:#fff;border:none;transition:opacity 0.2s;">
+        {{ block.settings.add_to_cart_text }} (0)
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes sd-fadeIn{from{opacity:0}to{opacity:1}}
+  #sd-fab-{{ block.id }}:hover{transform:scale(1.1);}
+  #sd-popup-{{ block.id }}[style*="flex"]{animation:sd-fadeIn 0.3s ease;}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var B = '{{ block.id }}';
+  var fab = document.getElementById('sd-fab-' + B);
+  var popup = document.getElementById('sd-popup-' + B);
+  var fabClose = document.getElementById('sd-fab-close-' + B);
+  var popupClose = document.getElementById('sd-popup-close-' + B);
+  var continueBtn = document.getElementById('sd-continue-' + B);
+  var addCartBtn = document.getElementById('sd-addcart-' + B);
+  var selectBtns = document.querySelectorAll('#sd-popup-' + B + ' .sd-select-btn');
+  var variantSelects = document.querySelectorAll('#sd-popup-' + B + ' .sd-variant-select');
+  var selected = [];
+  var maxFree = {{ block.settings.free_qty | default: 1 }};
+  var selectText = '{{ block.settings.select_text }}';
+  var addText = '{{ block.settings.add_to_cart_text }}';
+  var primaryColor = '{{ block.settings.primary_color }}';
+
+  function openPopup() { if (popup) popup.style.display = 'flex'; }
+  function closePopup() {
+    if (popup) popup.style.display = 'none';
+    sessionStorage.setItem('sd-bxgy-dismissed-' + B, '1');
+  }
+
+  // FAB click → open popup
+  if (fab) fab.addEventListener('click', function(e) {
+    if (e.target.id === 'sd-fab-close-' + B) return;
+    openPopup();
+  });
+
+  // Close buttons
+  if (fabClose) fabClose.addEventListener('click', function(e) {
+    e.stopPropagation();
+    fab.style.display = 'none';
+  });
+  if (popupClose) popupClose.addEventListener('click', closePopup);
+  if (continueBtn) continueBtn.addEventListener('click', closePopup);
+
+  // Close on background click
+  if (popup) popup.addEventListener('click', function(e) {
+    if (e.target === popup) closePopup();
+  });
+
+  // Variant select → update data-variant-id
+  variantSelects.forEach(function(sel) {
+    sel.addEventListener('change', function() {
+      var btn = this.closest('.sd-gift-card').querySelector('.sd-select-btn');
+      if (btn) btn.dataset.variantId = this.value;
+    });
+  });
+
+  // Select/deselect products
+  selectBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var vid = this.dataset.variantId;
+      var card = this.closest('.sd-gift-card');
+      var idx = selected.indexOf(vid);
+
+      if (idx === -1) {
+        // Select
+        if (selected.length >= maxFree) {
+          alert('You can only select ' + maxFree + ' free item(s)');
+          return;
+        }
+        selected.push(vid);
+        this.textContent = 'Selected ✓';
+        this.style.background = '#10B981';
+        if (card) card.style.borderColor = '#10B981';
+      } else {
+        // Deselect
+        selected.splice(idx, 1);
+        this.textContent = selectText;
+        this.style.background = primaryColor;
+        if (card) card.style.borderColor = '#e0e0e0';
+      }
+
+      if (addCartBtn) addCartBtn.textContent = addText + ' (' + selected.length + ')';
+    });
+  });
+
+  // Add to cart
+  if (addCartBtn) addCartBtn.addEventListener('click', function() {
+    if (selected.length === 0) {
+      alert('Please select at least one product');
+      return;
+    }
+
+    this.textContent = 'Adding...';
+    this.disabled = true;
+
+    var items = selected.map(function(vid) {
+      return { id: parseInt(vid), quantity: 1 };
+    });
+
+    fetch('/cart/add.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: items })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function() {
+      closePopup();
+      window.location.href = '/cart';
+    })
+    .catch(function(err) {
+      console.error('Add to cart error:', err);
+      addCartBtn.textContent = addText + ' (' + selected.length + ')';
+      addCartBtn.disabled = false;
+      alert('Error adding to cart. Please try again.');
+    });
+  });
+
+  // Auto-show popup if cart qualifies and not dismissed
+  {% assign min_q = block.settings.min_buy_quantity | default: 2 %}
+  {% if cart.item_count >= min_q %}
+    if (!sessionStorage.getItem('sd-bxgy-dismissed-' + B)) {
+      setTimeout(openPopup, {{ block.settings.popup_delay | default: 1000 }});
+    }
+  {% endif %}
+});
+</script>
+
+{% endif %}
+
+{% schema %}
+{
+  "name": "Buy X Get Y + Gift Button",
+  "target": "section",
+  "settings": [
+    { "type": "checkbox", "id": "enabled", "label": "Enable Buy X Get Y", "default": true },
+    { "type": "header", "content": "Popup" },
+    { "type": "text", "id": "popup_title", "label": "Popup title", "default": "🎁 Your cart qualifies for a reward!" },
+    { "type": "text", "id": "popup_subtitle", "label": "Subtitle", "default": "Choose a free gift to add to your order before checking out." },
+    { "type": "number", "id": "min_buy_quantity", "label": "Min cart items to auto-show", "default": 2, "info": "Popup auto-opens when cart has this many items. Button is always visible." },
+    { "type": "number", "id": "free_qty", "label": "Max free items", "default": 1 },
+    { "type": "number", "id": "discount_percent", "label": "Discount % (100 = free)", "default": 100 },
+    { "type": "collection", "id": "gift_collection", "label": "Gift products collection" },
+    { "type": "range", "id": "popup_delay", "label": "Auto-show delay", "min": 0, "max": 5000, "step": 500, "default": 1000, "unit": "ms" },
+    { "type": "header", "content": "Buttons" },
+    { "type": "text", "id": "select_text", "label": "Select text", "default": "Select" },
+    { "type": "text", "id": "add_to_cart_text", "label": "Add to cart text", "default": "Add to Cart" },
+    { "type": "text", "id": "continue_text", "label": "Continue text", "default": "Continue Shopping" },
+    { "type": "checkbox", "id": "hide_continue", "label": "Hide continue button", "default": false },
+    { "type": "header", "content": "Floating Button" },
+    { "type": "select", "id": "fab_position", "label": "Position", "options": [
+      { "value": "left", "label": "Bottom left" },
+      { "value": "right", "label": "Bottom right" }
+    ], "default": "right" },
+    { "type": "range", "id": "fab_size", "label": "Size", "min": 40, "max": 70, "step": 2, "default": 56, "unit": "px" },
+    { "type": "range", "id": "fab_radius", "label": "Radius", "min": 0, "max": 35, "step": 1, "default": 28, "unit": "px" },
+    { "type": "checkbox", "id": "hide_fab_close", "label": "Hide close on button", "default": false },
+    { "type": "header", "content": "Colors" },
+    { "type": "color", "id": "primary_color", "label": "Primary color", "default": "#000000" },
+    { "type": "color", "id": "header_bg", "label": "Header background", "default": "#1E2832" },
+    { "type": "color", "id": "badge_color", "label": "Badge color", "default": "#E53E3E" },
+    { "type": "color", "id": "fab_bg", "label": "Button color", "default": "#03A87C" }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,404 @@
+/* ─── SmartDiscounts Widget Styles ─── */
+
+/* Reset */
+.sd-countdown-banner *,
+.sd-quantity-table *,
+.sd-saving-cart *,
+.sd-shipping-bar *,
+.sd-bxgy-popup * {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Quantity table - prevent showing in cart drawer */
+cart-drawer .sd-quantity-table,
+.cart-drawer .sd-quantity-table,
+#cart-drawer .sd-quantity-table,
+.drawer .sd-quantity-table,
+[data-cart-drawer] .sd-quantity-table,
+cart-drawer [id^="sd-table-"],
+.cart-drawer [id^="sd-table-"],
+#cart-drawer [id^="sd-table-"],
+.drawer [id^="sd-table-"],
+[data-cart-drawer] [id^="sd-table-"],
+cart-drawer [id^="sd-dprice-"],
+.cart-drawer [id^="sd-dprice-"],
+#cart-drawer [id^="sd-dprice-"],
+.drawer [id^="sd-dprice-"],
+[data-cart-drawer] [id^="sd-dprice-"] {
+  display: none !important;
+}
+
+/* ─── Countdown Timer ─── */
+.sd-countdown-banner {
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin: 4px 0;
+}
+
+.sd-countdown-top {
+  /* already positioned by inline styles */
+}
+
+.sd-countdown-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.sd-countdown-icon {
+  font-size: 16px;
+}
+
+.sd-countdown-title {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sd-countdown-digits {
+  display: flex;
+  gap: 6px;
+}
+
+.sd-countdown-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.sd-countdown-num {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  min-width: 30px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.sd-countdown-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.sd-countdown-cta {
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+
+.sd-countdown-cta:hover {
+  opacity: 0.85;
+}
+
+.sd-countdown-close {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  line-height: 1;
+}
+
+.sd-countdown-close:hover {
+  opacity: 1;
+}
+
+/* ─── Quantity Discount Table ─── */
+.sd-quantity-table {
+  margin: 16px 0;
+  overflow: hidden;
+}
+
+.sd-qty-header {
+  padding: 10px 16px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.sd-qty-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  font-size: 13px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  transition: background 0.15s;
+}
+
+.sd-qty-row:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.sd-qty-labels {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.sd-qty-even {
+  background: rgba(0, 0, 0, 0.01);
+}
+
+.sd-qty-discount {
+  font-weight: 600;
+  color: #10B981;
+}
+
+.sd-qty-row.sd-qty-active {
+  background: rgba(16, 185, 129, 0.08);
+  border-left: 3px solid #10B981;
+}
+
+.sd-qty-preview {
+  padding: 10px 16px;
+  border-top: 2px solid #10B981;
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.sd-qty-preview-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.sd-qty-new-price {
+  font-weight: 700;
+}
+
+.sd-qty-savings {
+  font-weight: 700;
+}
+
+/* ─── Saving on Cart ─── */
+.sd-saving-cart {
+  margin: 16px 0;
+  padding: 8px 0;
+}
+
+.sd-saving-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.sd-saving-highlight {
+  margin: 4px 0;
+}
+
+/* ─── Shipping Progress Bar ─── */
+.sd-shipping-bar {
+  margin: 16px 0;
+}
+
+.sd-shipping-message {
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* ─── Buy X Get Y Popup ─── */
+.sd-bxgy-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: sd-fadeIn 0.3s ease;
+}
+
+.sd-bxgy-popup {
+  background: white;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  animation: sd-slideUp 0.3s ease;
+}
+
+.sd-bxgy-header {
+  padding: 16px 20px;
+  border-radius: 12px 12px 0 0;
+  position: relative;
+}
+
+.sd-bxgy-header h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  padding-right: 30px;
+}
+
+.sd-bxgy-header p {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.sd-bxgy-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.sd-bxgy-close:hover {
+  opacity: 1;
+}
+
+.sd-bxgy-products {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.sd-bxgy-product {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+  position: relative;
+}
+
+.sd-bxgy-product img {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.sd-bxgy-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: white;
+}
+
+.sd-bxgy-actions {
+  display: flex;
+  gap: 10px;
+  padding: 16px;
+}
+
+.sd-bxgy-actions button {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.sd-bxgy-actions button:hover {
+  opacity: 0.85;
+}
+
+/* ─── Floating Action Button ─── */
+.sd-fab {
+  position: fixed;
+  bottom: 24px;
+  z-index: 9997;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+}
+
+.sd-fab:hover {
+  transform: scale(1.08);
+}
+
+.sd-fab-left {
+  left: 24px;
+}
+
+.sd-fab-right {
+  right: 24px;
+}
+
+.sd-fab-close {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  cursor: pointer;
+  border: 1px solid #ddd;
+}
+
+/* ─── Animations ─── */
+@keyframes sd-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sd-slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 600px) {
+  .sd-countdown-content {
+    gap: 8px;
+  }
+  .sd-countdown-title {
+    font-size: 11px;
+  }
+  .sd-countdown-num {
+    padding: 3px 5px;
+    font-size: 11px;
+    min-width: 24px;
+  }
+  .sd-countdown-cta {
+    padding: 4px 10px;
+    font-size: 10px;
+  }
+  .sd-bxgy-products {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

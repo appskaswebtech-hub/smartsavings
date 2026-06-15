@@ -1,0 +1,315 @@
+{% comment %}
+  SmartDiscounts - Quantity Discount Table
+  Two modes: Auto (shows tiers from active campaigns) or Coupon (shows after entering code)
+{% endcomment %}
+
+{{ 'discount-widgets.css' | asset_url | stylesheet_tag }}
+
+{% if block.settings.enabled %}
+<div
+  id="sd-table-{{ block.id }}"
+  data-price="{{ product.selected_or_first_available_variant.price }}"
+  data-product-id="{{ product.id }}"
+  data-collections="{% for col in product.collections %}{{ col.id }}{% unless forloop.last %},{% endunless %}{% endfor %}"
+  data-sym="{{ cart.currency.symbol }}"
+  data-shop="{{ shop.permanent_domain }}"
+  data-mode="{{ block.settings.mode }}"
+  style="border:1px solid {{ block.settings.border_color }};border-radius:{{ block.settings.border_radius }}px;overflow:hidden;margin:16px 0;{% if block.settings.mode == 'auto' %}display:none;{% endif %}"
+>
+  {%- comment -%} Coupon Code Section {%- endcomment -%}
+  {% if block.settings.mode == 'coupon' %}
+    <div id="sd-coupon-section-{{ block.id }}" style="padding:14px 16px;">
+      <div
+        id="sd-coupon-toggle-{{ block.id }}"
+        style="text-align:center;color:{{ block.settings.text_color }};font-size:13px;cursor:pointer;font-weight:600;"
+      >
+        {{ block.settings.coupon_prompt }}
+      </div>
+      <div id="sd-coupon-form-{{ block.id }}" style="display:none;margin-top:10px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input
+            type="text"
+            id="sd-coupon-input-{{ block.id }}"
+            placeholder="{{ block.settings.coupon_placeholder }}"
+            style="flex:1;padding:10px 14px;border:1px solid {{ block.settings.border_color }};border-radius:6px;font-size:14px;outline:none;"
+          />
+          <button
+            id="sd-coupon-apply-{{ block.id }}"
+            style="padding:10px 20px;background:{{ block.settings.coupon_btn_bg }};color:{{ block.settings.coupon_btn_text }};border:none;border-radius:6px;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap;"
+          >
+            {{ block.settings.coupon_btn_label }}
+          </button>
+        </div>
+        <div id="sd-coupon-error-{{ block.id }}" style="display:none;color:#ef4444;font-size:12px;margin-top:6px;font-weight:600;"></div>
+        <button
+          id="sd-coupon-close-{{ block.id }}"
+          style="margin-top:8px;padding:8px 16px;background:#1a1a1a;color:white;border:none;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  {% endif %}
+
+  {%- comment -%} Discount Table (hidden until loaded) {%- endcomment -%}
+  <div id="sd-table-content-{{ block.id }}" style="{% if block.settings.mode == 'coupon' %}display:none;{% endif %}">
+    <div style="background:{{ block.settings.header_bg }};color:{{ block.settings.text_color }};padding:10px 16px;font-weight:700;font-size:14px;">
+      {{ block.settings.header_title }}
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 16px;font-weight:bold;font-size:13px;color:{{ block.settings.table_text_color }};background:rgba(0,0,0,0.02);border-top:1px solid {{ block.settings.border_color }};">
+      <span>{{ block.settings.buy_text }}</span>
+      <span>{{ block.settings.get_text }}</span>
+    </div>
+    <div id="sd-tiers-{{ block.id }}"></div>
+    <div id="sd-calc-{{ block.id }}" style="display:none;padding:12px 16px;border-top:2px solid {{ block.settings.savings_color }};background:rgba(16,185,129,0.04);"></div>
+    <div id="sd-hint-{{ block.id }}" style="display:none;padding:8px 16px;border-top:1px solid rgba(0,0,0,0.06);background:#fffbeb;font-size:12px;color:#92400e;text-align:center;"></div>
+  </div>
+</div>
+<div id="sd-dprice-{{ block.id }}" style="display:none;margin:8px 0;"></div>
+
+<style>
+  .sd-tier-active{background:rgba(16,185,129,0.1)!important;border-left:3px solid #10B981!important;font-weight:bold!important;}
+  cart-drawer [id^="sd-table-"],.cart-drawer [id^="sd-table-"],#cart-drawer [id^="sd-table-"],
+  cart-drawer [id^="sd-dprice-"],.cart-drawer [id^="sd-dprice-"],#cart-drawer [id^="sd-dprice-"]{display:none!important;}
+  #sd-coupon-input-{{ block.id }}:focus { border-color: {{ block.settings.savings_color }}; box-shadow: 0 0 0 2px rgba(16,185,129,0.15); }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var B = '{{ block.id }}';
+  var box = document.getElementById('sd-table-' + B);
+  if (!box) return;
+  var priceCents = parseInt(box.dataset.price) || 0;
+  var P = priceCents / 100;
+  var S = box.dataset.sym || '$';
+  var productId = box.dataset.productId || '';
+  var collectionIds = (box.dataset.collections || '').split(',').filter(Boolean);
+  var savingsColor = '{{ block.settings.savings_color }}';
+  var tableTextColor = '{{ block.settings.table_text_color }}';
+  var tiersContainer = document.getElementById('sd-tiers-' + B);
+  var tableContent = document.getElementById('sd-table-content-' + B);
+  var calcEl = document.getElementById('sd-calc-' + B);
+  var hintEl = document.getElementById('sd-hint-' + B);
+  var dpriceEl = document.getElementById('sd-dprice-' + B);
+  var realPrice = document.querySelector('.price__container') || document.querySelector('.price') || document.querySelector('.product__price') || document.querySelector('[data-product-price]');
+  // Store original price HTML to restore later
+  var originalPriceHTML = realPrice ? realPrice.innerHTML : '';
+  if (realPrice && dpriceEl) realPrice.parentNode.insertBefore(dpriceEl, realPrice.nextSibling);
+  var T = [];
+  var lastQ = -1;
+  var mode = box.dataset.mode || 'auto';
+
+  function showTable() { box.style.display = 'block'; }
+  function hideTable() { box.style.display = 'none'; if (dpriceEl) dpriceEl.style.display = 'none'; }
+  function showTiers() { if (tableContent) tableContent.style.display = 'block'; }
+
+  function renderTiers(tiers) {
+    T = tiers.sort(function(a,b){ return a.q - b.q; });
+    var html = '';
+    T.forEach(function(t) {
+      html += '<div class="sd-r" data-q="'+t.q+'" data-d="'+t.d+'" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;font-size:13px;color:'+tableTextColor+';border-top:1px solid rgba(0,0,0,0.06);transition:all 0.2s;"><span>'+t.q+'+</span><span style="color:'+savingsColor+';font-weight:600;">'+t.d+'% off</span></div>';
+    });
+    tiersContainer.innerHTML = html;
+    T.forEach(function(t, i) { t.el = tiersContainer.children[i]; });
+    showTable();
+    showTiers();
+    lastQ = -1;
+    go();
+  }
+
+  function fetchAndMatch(campaignName) {
+    return fetch('/apps/smartdiscounts?shop=' + encodeURIComponent(box.dataset.shop || ''))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var campaigns = data.campaigns || [];
+        var matched = null;
+
+        for (var i = 0; i < campaigns.length; i++) {
+          var c = campaigns[i];
+
+          // If coupon mode, match by campaign name
+          if (campaignName) {
+            if (c.name.toLowerCase() !== campaignName.toLowerCase()) continue;
+          } else {
+            // Auto mode - only quantity_discount
+            if (c.type !== 'quantity_discount' || c.status !== 'active') continue;
+          }
+
+          // Check product targeting
+          var applies = false;
+          if (c.appliesTo === 'all' || !c.appliesTo) { applies = true; }
+          else if (c.appliesTo === 'specific_products' && c.productIds) {
+            for (var j = 0; j < c.productIds.length; j++) { if (String(c.productIds[j]) === String(productId)) { applies = true; break; } }
+          } else if (c.appliesTo === 'specific_collections' && c.collectionIds) {
+            for (var j = 0; j < c.collectionIds.length; j++) { for (var k = 0; k < collectionIds.length; k++) { if (String(c.collectionIds[j]) === String(collectionIds[k])) { applies = true; break; } } if (applies) break; }
+          }
+          if (applies) { matched = c; break; }
+        }
+
+        return matched;
+      });
+  }
+
+  // ─── AUTO MODE ───
+  if (mode === 'auto') {
+    fetchAndMatch(null)
+      .then(function(matched) {
+        if (matched && matched.tiers && matched.tiers.length > 0) {
+          var tiers = matched.tiers.map(function(t) {
+            return { q: parseInt(t.quantity || t.qty || t.q), d: parseFloat(t.discount || t.disc || t.d) };
+          }).filter(function(t) { return !isNaN(t.q) && !isNaN(t.d); });
+          if (tiers.length > 0) { renderTiers(tiers); return; }
+        }
+        hideTable();
+      })
+      .catch(function() { hideTable(); });
+  }
+
+  // ─── COUPON MODE ───
+  if (mode === 'coupon') {
+    showTable();
+    var toggle = document.getElementById('sd-coupon-toggle-' + B);
+    var form = document.getElementById('sd-coupon-form-' + B);
+    var input = document.getElementById('sd-coupon-input-' + B);
+    var applyBtn = document.getElementById('sd-coupon-apply-' + B);
+    var closeBtn = document.getElementById('sd-coupon-close-' + B);
+    var errorEl = document.getElementById('sd-coupon-error-' + B);
+    var couponSection = document.getElementById('sd-coupon-section-' + B);
+
+    if (toggle) toggle.addEventListener('click', function() {
+      form.style.display = 'block';
+      toggle.style.display = 'none';
+      if (input) input.focus();
+    });
+
+    if (closeBtn) closeBtn.addEventListener('click', function() {
+      form.style.display = 'none';
+      toggle.style.display = 'block';
+      if (errorEl) errorEl.style.display = 'none';
+    });
+
+    if (applyBtn) applyBtn.addEventListener('click', function() {
+      var code = input ? input.value.trim() : '';
+      if (!code) {
+        errorEl.textContent = 'Please enter a coupon code';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      applyBtn.textContent = 'Checking...';
+      applyBtn.disabled = true;
+      errorEl.style.display = 'none';
+
+      fetchAndMatch(code)
+        .then(function(matched) {
+          if (matched && matched.tiers && matched.tiers.length > 0) {
+            var tiers = matched.tiers.map(function(t) {
+              return { q: parseInt(t.quantity || t.qty || t.q), d: parseFloat(t.discount || t.disc || t.d) };
+            }).filter(function(t) { return !isNaN(t.q) && !isNaN(t.d); });
+
+            if (tiers.length > 0) {
+              // Hide coupon section, show tiers
+              couponSection.innerHTML = '<div style="padding:10px 16px;background:#f0fdf4;display:flex;justify-content:space-between;align-items:center;"><span style="color:#10b981;font-weight:700;font-size:13px;">✅ Coupon "' + code.toUpperCase() + '" applied!</span><button onclick="location.reload()" style="background:none;border:none;color:#999;font-size:12px;cursor:pointer;text-decoration:underline;">Remove</button></div>';
+              renderTiers(tiers);
+              return;
+            }
+          }
+          // Not found
+          errorEl.textContent = 'Invalid coupon code. Please check and try again.';
+          errorEl.style.display = 'block';
+          applyBtn.textContent = '{{ block.settings.coupon_btn_label }}';
+          applyBtn.disabled = false;
+        })
+        .catch(function() {
+          errorEl.textContent = 'Error checking coupon. Please try again.';
+          errorEl.style.display = 'block';
+          applyBtn.textContent = '{{ block.settings.coupon_btn_label }}';
+          applyBtn.disabled = false;
+        });
+    });
+
+    // Allow Enter key
+    if (input) input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); applyBtn.click(); }
+    });
+  }
+
+  function go() {
+    if (T.length === 0) return;
+    var inp = document.querySelector('input[name="quantity"]') || document.querySelector('.quantity__input') || document.querySelector('quantity-input input') || document.querySelector('.product-form input[type="number"]');
+    var q = inp ? (parseInt(inp.value) || 1) : 1;
+    if (q === lastQ) return;
+    lastQ = q;
+    var act = null, nxt = null;
+    for (var i = T.length-1; i >= 0; i--) { if (q >= T[i].q) { act = T[i]; break; } }
+    for (var i = 0; i < T.length; i++) { if (q < T[i].q) { nxt = T[i]; break; } }
+    T.forEach(function(t) { if (t.el) { t.el.classList.remove('sd-tier-active'); t.el.style.background=''; t.el.style.borderLeft=''; t.el.style.fontWeight=''; } });
+    if (act && act.el) act.el.classList.add('sd-tier-active');
+    var dp = act ? P*(1-act.d/100) : P;
+    var ts = act ? (P-dp)*q : 0;
+    if (act && calcEl) {
+      calcEl.style.display='block';
+      calcEl.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:13px;">Price per item:</span><span><s style="color:#999;font-size:12px;margin-right:6px;">'+S+P.toFixed(2)+'</s><b style="color:'+savingsColor+';font-size:15px;">'+S+dp.toFixed(2)+'</b></span></div><div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:13px;">Total savings:</span><b style="color:'+savingsColor+';font-size:14px;">-'+S+ts.toFixed(2)+' ('+act.d+'% off)</b></div>';
+    } else if (calcEl) calcEl.style.display='none';
+    if (hintEl) {
+      if (!act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more to unlock '+nxt.d+'% off!'; }
+      else if (act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more for '+nxt.d+'% off (saving '+act.d+'% now)'; }
+      else hintEl.style.display='none';
+    }
+    if (realPrice) {
+      if (act) {
+        // Replace the price container content with strikethrough + discounted price
+        realPrice.innerHTML =
+          '<div class="sd-price-replaced" style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">' +
+            '<s style="color:#999;font-size:0.85em;font-weight:400;text-decoration:line-through;">' + S + P.toFixed(2) + '</s>' +
+            '<span style="font-size:1em;font-weight:700;color:inherit;">' + S + dp.toFixed(2) + '</span>' +
+          '</div>';
+        // Hide the separate overlay
+        if (dpriceEl) {
+          dpriceEl.style.display = 'block';
+          dpriceEl.innerHTML =
+            '<div style="font-size:0.85em;color:' + savingsColor + ';font-weight:600;margin-top:2px;">You save ' + S + ts.toFixed(2) + ' on ' + q + ' item' + (q > 1 ? 's' : '') +
+            ' <span style="background:' + savingsColor + ';color:#fff;padding:2px 8px;border-radius:4px;font-size:0.8em;font-weight:700;margin-left:4px;">SAVE ' + act.d + '%</span></div>';
+        }
+      } else {
+        // Restore original price
+        realPrice.innerHTML = originalPriceHTML;
+        if (dpriceEl) dpriceEl.style.display = 'none';
+      }
+    }
+  }
+  setInterval(go, 200);
+});
+</script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Quantity Discount Table",
+  "target": "section",
+  "settings": [
+    { "type": "checkbox", "id": "enabled", "label": "Enable quantity discount table", "default": true },
+    { "type": "select", "id": "mode", "label": "Display mode", "options": [
+      { "value": "auto", "label": "Auto — show tiers from active campaigns" },
+      { "value": "coupon", "label": "Coupon — show tiers after entering campaign name" }
+    ], "default": "auto", "info": "Auto: tiers appear automatically. Coupon: customer enters campaign name to see tiers." },
+    { "type": "header", "content": "Table settings" },
+    { "type": "text", "id": "header_title", "label": "Header title", "default": "Buy more, Save more!" },
+    { "type": "text", "id": "buy_text", "label": "Buy column label", "default": "Buy" },
+    { "type": "text", "id": "get_text", "label": "Get column label", "default": "Get" },
+    { "type": "header", "content": "Coupon field settings" },
+    { "type": "text", "id": "coupon_prompt", "label": "Prompt text", "default": "Have a coupon? Click here to enter your code." },
+    { "type": "text", "id": "coupon_placeholder", "label": "Input placeholder", "default": "Coupon code" },
+    { "type": "text", "id": "coupon_btn_label", "label": "Apply button text", "default": "Apply Coupon" },
+    { "type": "color", "id": "coupon_btn_bg", "label": "Apply button background", "default": "#1a1a1a" },
+    { "type": "color", "id": "coupon_btn_text", "label": "Apply button text color", "default": "#ffffff" },
+    { "type": "header", "content": "Styles" },
+    { "type": "color", "id": "text_color", "label": "Header text color", "default": "#000000" },
+    { "type": "color", "id": "header_bg", "label": "Header background", "default": "#F5F5F5" },
+    { "type": "color", "id": "table_text_color", "label": "Table text color", "default": "#333333" },
+    { "type": "color", "id": "border_color", "label": "Border color", "default": "#E0E0E0" },
+    { "type": "color", "id": "savings_color", "label": "Savings color", "default": "#10B981" },
+    { "type": "range", "id": "border_radius", "label": "Border radius", "min": 0, "max": 20, "step": 1, "default": 8, "unit": "px" }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,55 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "d7c0551f73cbfbe0d03eaefd795384fa"
+name = "SmartSavings"
+application_url = "https://smartsavings.kaswebtechsolutions.com"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2025-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/discounts/delete"
+  topics = [ "discounts/delete" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/discounts/update"
+  topics = [ "discounts/update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/subscriptions_update"
+  topics = [ "app_subscriptions/update" ]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customers,read_discounts,read_orders,read_products,write_customers,write_discounts,write_orders"
+
+[auth]
+redirect_urls = [
+  "https://smartsavings.kaswebtechsolutions.com/auth/callback",
+  "https://smartsavings.kaswebtechsolutions.com/auth/shopify/callback",
+  "https://smartsavings.kaswebtechsolutions.com/api/auth/callback"
+]
+
+[app_proxy]
+url = "https://smartsavings.kaswebtechsolutions.com/api/proxy"
+subpath = "smartdiscounts"
+prefix = "apps"
+
+[pos]
+embedded = false
