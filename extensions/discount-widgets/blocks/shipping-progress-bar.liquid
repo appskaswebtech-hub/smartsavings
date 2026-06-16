@@ -1,304 +1,191 @@
 {% comment %}
   SmartDiscounts - Shipping Progress Bar
-
-  Selection rule (re-evaluated on every cart change):
-    1. If cart contains ONLY specific-campaign products:
-         → show specific threshold, progress = sum of matching items
-    2. If cart contains ANY non-specific product (mixed OR only non-specific):
-         → show max(specific_threshold, all_products_threshold), progress = cart total
-    3. If only one campaign type is active, that one wins for its cart context.
-    4. If no campaign applies → hide.
-
-  Backend contract (from /apps/smartdiscounts):
-    campaign.type === "shipping_discount"
-    campaign.discountType === "free_shipping"
-    campaign.status === "active"
-    campaign.minimumAmount   (number, dollars)
-    campaign.appliesTo       ("all" | "specific_products" | ...)
-    campaign.productIds      (array of numeric product id strings)
+  Supports: amount, quantity, both (AND), either (OR)
 {% endcomment %}
 
 {{ 'discount-widgets.css' | asset_url | stylesheet_tag }}
 
 {% if block.settings.enabled %}
-  <div
-    id="sd-shipping-{{ block.id }}"
-    data-shop="{{ shop.permanent_domain }}"
-    data-current-product-id="{% if product %}{{ product.id }}{% endif %}"
-    data-initial="{{ block.settings.initial_message }}"
-    data-progress="{{ block.settings.progress_message }}"
-    data-success="{{ block.settings.success_message }}"
-    style="
-      display: none;
-      background: {{ block.settings.bg_color }};
-      border: 1px solid {{ block.settings.border_color }};
-      border-radius: {{ block.settings.card_radius }}px;
-      padding: 12px 16px;
-      font-size: {{ block.settings.text_size }}px;
-      color: {{ block.settings.text_color }};
-      margin: 16px 0;
-    "
-  >
-    <div id="sd-shipping-msg-{{ block.id }}" style="font-weight:500;line-height:1.4;"></div>
-    <div
-      style="
-        background: {{ block.settings.progress_bg }};
-        border-radius: {{ block.settings.progress_radius }}px;
-        height: 8px;
-        margin-top: 8px;
-        overflow: hidden;
-      "
-    >
-      <div
-        id="sd-shipping-fill-{{ block.id }}"
-        style="
-          background: {{ block.settings.progress_fg }};
-          width: 0%;
-          height: 100%;
-          border-radius: {{ block.settings.progress_radius }}px;
-          transition: width 0.5s ease;
-        "
-      ></div>
-    </div>
+<div
+  id="sd-shipping-{{ block.id }}"
+  data-shop="{{ shop.permanent_domain }}"
+  data-sym="{{ cart.currency.symbol }}"
+  style="
+    border: 1px solid {{ block.settings.border_color }};
+    border-radius: {{ block.settings.border_radius }}px;
+    padding: 14px 16px;
+    margin: 16px 0;
+    display: none;
+  "
+>
+  <div id="sd-ship-msg-{{ block.id }}" style="font-size:14px;font-weight:600;margin-bottom:10px;text-align:center;"></div>
+  <div style="background:#f0f0f0;border-radius:99px;height:6px;overflow:hidden;">
+    <div id="sd-ship-bar-{{ block.id }}" style="height:6px;border-radius:99px;background:{{ block.settings.bar_color }};width:0%;transition:width 0.5s ease;"></div>
   </div>
+  <div id="sd-ship-sub-{{ block.id }}" style="font-size:11px;color:#888;text-align:center;margin-top:6px;"></div>
+</div>
 
-  <script>
-  (function() {
-    var B = '{{ block.id }}';
-    var container = document.getElementById('sd-shipping-' + B);
-    var msgEl = document.getElementById('sd-shipping-msg-' + B);
-    var fillEl = document.getElementById('sd-shipping-fill-' + B);
-    if (!container || !msgEl || !fillEl) return;
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var B    = '{{ block.id }}';
+  var box  = document.getElementById('sd-shipping-' + B);
+  var msg  = document.getElementById('sd-ship-msg-' + B);
+  var bar  = document.getElementById('sd-ship-bar-' + B);
+  var sub  = document.getElementById('sd-ship-sub-' + B);
+  if (!box) return;
 
-    var shop = container.dataset.shop || '';
-    var currentProductId = container.dataset.currentProductId || '';
-    var specificCampaigns = []; // free shipping for specific products
-    var allProductsCampaigns = []; // free shipping for all products
+  var S           = box.dataset.sym || '$';
+  var barColor    = '{{ block.settings.bar_color }}';
+  var successColor = '{{ block.settings.success_color }}';
 
-    var initialMsg = container.dataset.initial || 'Add {amount} to unlock free shipping';
-    var progressMsg = container.dataset.progress || "You're {amount} away from free shipping!";
-    var successMsg = container.dataset.success || "You've unlocked free shipping!";
+  function fmt(dollars) {
+    var s = parseFloat(dollars).toFixed(2).split('.');
+    s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return S + (s[1] === '00' ? s[0] : s.join('.'));
+  }
 
-    function fmt(amount) {
-      return '$' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  function getItemCount(cart) {
+    return (cart.items || []).reduce(function(sum, item) { return sum + (item.quantity || 0); }, 0);
+  }
+
+  function render(campaign, cart) {
+    var minAmount  = parseFloat(campaign.minimumAmount  || 0) || 0;
+    var minQty     = parseInt(campaign.minimumQuantity   || 0) || 0;
+    var reqType    = campaign.requirementType || 'amount';
+
+    var cartDollars   = (cart.total_price || 0) / 100;
+    var cartItemCount = getItemCount(cart);
+
+    // ── Check which conditions are met ──────────────────────────────
+    var amountMet = (minAmount <= 0) || (cartDollars >= minAmount);
+    var qtyMet    = (minQty   <= 0) || (cartItemCount >= minQty);
+
+    // ── Determine unlock based on requirement type ───────────────────
+    var unlocked;
+    if (reqType === 'amount') {
+      unlocked = amountMet;
+    } else if (reqType === 'quantity') {
+      unlocked = qtyMet;
+    } else if (reqType === 'either') {
+      unlocked = amountMet || qtyMet;          // OR logic
+    } else {
+      unlocked = amountMet && qtyMet;          // "both" = AND logic (default)
     }
 
-    // Combine all specific campaigns' productIds into one set for fast lookup.
-    // (If a merchant has multiple specific campaigns, any matching product counts
-    // as a "specific item" for the cart-contents check.)
-    function buildSpecificProductSet() {
-      var set = new Set();
-      for (var i = 0; i < specificCampaigns.length; i++) {
-        var ids = specificCampaigns[i].productIds || [];
-        for (var j = 0; j < ids.length; j++) set.add(String(ids[j]));
-      }
-      return set;
+    // ── Calculate fill percentage ────────────────────────────────────
+    var fillPct = 0;
+    if (unlocked) {
+      fillPct = 100;
+    } else if (reqType === 'amount') {
+      fillPct = minAmount > 0 ? Math.min(100, cartDollars / minAmount * 100) : 0;
+    } else if (reqType === 'quantity') {
+      fillPct = minQty > 0 ? Math.min(100, cartItemCount / minQty * 100) : 0;
+    } else if (reqType === 'either') {
+      // Show progress toward whichever condition is CLOSEST to being met
+      var amtPct = minAmount > 0 ? Math.min(100, cartDollars / minAmount * 100) : (amountMet ? 100 : 0);
+      var qtyPct = minQty   > 0 ? Math.min(100, cartItemCount / minQty * 100)   : (qtyMet   ? 100 : 0);
+      fillPct = Math.max(amtPct, qtyPct);      // show best progress
+    } else {
+      // "both" — show LOWER (further from completion)
+      var amtPct = minAmount > 0 ? Math.min(100, cartDollars / minAmount * 100) : 100;
+      var qtyPct = minQty   > 0 ? Math.min(100, cartItemCount / minQty * 100)   : 100;
+      fillPct = Math.min(amtPct, qtyPct);
     }
 
-    // Returns the lowest threshold among the specific campaigns whose
-    // productIds match at least one item in the cart. Null if none match.
-    function bestSpecificThreshold(cart) {
-      var items = (cart && cart.items) || [];
-      var itemIds = items.map(function(it) { return String(it.product_id); });
-      var bestThr = null;
-      for (var i = 0; i < specificCampaigns.length; i++) {
-        var c = specificCampaigns[i];
-        var pids = c.productIds || [];
-        var matches = false;
-        for (var j = 0; j < pids.length; j++) {
-          if (itemIds.indexOf(String(pids[j])) !== -1) { matches = true; break; }
-        }
-        if (matches) {
-          var thr = parseFloat(c.minimumAmount);
-          if (!isNaN(thr) && thr > 0) {
-            if (bestThr === null || thr < bestThr) bestThr = thr;
-          }
-        }
+    // ── Build sub-line ───────────────────────────────────────────────
+    var subParts = [];
+    if (minAmount > 0) subParts.push(fmt(cartDollars) + ' / ' + fmt(minAmount));
+    if (minQty > 0)    subParts.push(cartItemCount + ' / ' + minQty + ' items');
+    var connector = (reqType === 'either') ? '  OR  ' : '  ·  ';
+    var subText = subParts.join(connector);
+
+    // ── Build message ────────────────────────────────────────────────
+    var msgText = '';
+
+    if (unlocked) {
+      msgText = '🎉 You\'ve unlocked free shipping!';
+      bar.style.background = successColor || '#10B981';
+      bar.style.width = '100%';
+      sub.style.display = 'none';
+
+    } else if (reqType === 'amount') {
+      var rem = fmt(minAmount - cartDollars);
+      msgText = 'Add <strong>' + rem + '</strong> to unlock free shipping 🚚';
+
+    } else if (reqType === 'quantity') {
+      var remQty = minQty - cartItemCount;
+      msgText = 'Add <strong>' + remQty + ' more ' + (remQty === 1 ? 'item' : 'items') + '</strong> to unlock free shipping 🚚';
+
+    } else if (reqType === 'either') {
+      // Show the most achievable condition (closest to being met)
+      var amtPct2 = minAmount > 0 ? (cartDollars / minAmount * 100) : 0;
+      var qtyPct2 = minQty   > 0 ? (cartItemCount / minQty   * 100) : 0;
+
+      if (qtyPct2 >= amtPct2 && minQty > 0 && !qtyMet) {
+        // Quantity is closer
+        var remQty2 = minQty - cartItemCount;
+        msgText = 'Add <strong>' + remQty2 + ' more ' + (remQty2 === 1 ? 'item' : 'items') + '</strong> OR <strong>' + fmt(Math.max(0, minAmount - cartDollars)) + '</strong> more to unlock free shipping 🚚';
+      } else if (minAmount > 0 && !amountMet) {
+        // Amount is closer
+        msgText = 'Add <strong>' + fmt(Math.max(0, minAmount - cartDollars)) + '</strong> more OR <strong>' + Math.max(0, minQty - cartItemCount) + ' more items</strong> to unlock free shipping 🚚';
+      } else {
+        msgText = 'Add more to unlock free shipping 🚚';
       }
-      return bestThr;
+
+    } else {
+      // "both" — show unmet conditions
+      var parts = [];
+      if (!amountMet && minAmount > 0) parts.push('<strong>' + fmt(minAmount - cartDollars) + '</strong> more');
+      if (!qtyMet   && minQty   > 0)   parts.push('<strong>' + Math.max(0, minQty - cartItemCount) + ' more ' + (minQty - cartItemCount === 1 ? 'item' : 'items') + '</strong>');
+      msgText = 'Add ' + parts.join(' and ') + ' to unlock free shipping 🚚';
     }
 
-    // Sum of cart items whose product_id is in the specific allow set, in cents.
-    function sumSpecificCents(cart, allowedSet) {
-      var items = (cart && cart.items) || [];
-      var total = 0;
-      for (var i = 0; i < items.length; i++) {
-        if (allowedSet.has(String(items[i].product_id))) {
-          total += items[i].final_line_price || 0;
-        }
-      }
-      return total;
+    msg.innerHTML = msgText;
+    if (!unlocked) {
+      bar.style.background = barColor;
+      bar.style.width = fillPct + '%';
+      sub.textContent = subText;
+      sub.style.display = subText ? 'block' : 'none';
     }
+    box.style.display = 'block';
+  }
 
-    // Get the lowest threshold from active all-products campaigns. Null if none.
-    function bestAllProductsThreshold() {
-      var bestThr = null;
-      for (var i = 0; i < allProductsCampaigns.length; i++) {
-        var thr = parseFloat(allProductsCampaigns[i].minimumAmount);
-        if (!isNaN(thr) && thr > 0) {
-          if (bestThr === null || thr < bestThr) bestThr = thr;
+  var activeCampaign = null;
+
+  function refresh() {
+    if (!activeCampaign) return;
+    fetch('/cart.js', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(cart) { render(activeCampaign, cart); })
+      .catch(function() {});
+  }
+
+  fetch('/apps/smartdiscounts?shop=' + encodeURIComponent(box.dataset.shop || ''))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var campaigns = data.campaigns || [];
+      for (var i = 0; i < campaigns.length; i++) {
+        if (campaigns[i].type === 'shipping_discount' && campaigns[i].status === 'active') {
+          activeCampaign = campaigns[i];
+          break;
         }
       }
-      return bestThr;
-    }
+      if (!activeCampaign) return;
 
-    // Decide which threshold to show + what counts toward it.
-    // Returns { thresholdDollars, applicableCents } or null.
-    function pickThreshold(cart) {
-      var items = (cart && cart.items) || [];
-      var allowedSet = buildSpecificProductSet();
-
-      // If there are no specific campaigns AND no all-products campaigns,
-      // we shouldn't even be here — but guard anyway.
-      if (specificCampaigns.length === 0 && allProductsCampaigns.length === 0) {
-        return null;
-      }
-
-      // Determine cart composition
-      var hasSpecific = false;
-      var hasNonSpecific = false;
-      for (var i = 0; i < items.length; i++) {
-        var pid = String(items[i].product_id);
-        if (allowedSet.has(pid)) hasSpecific = true;
-        else hasNonSpecific = true;
-        if (hasSpecific && hasNonSpecific) break;
-      }
-
-      // Empty cart — pick a sensible default based on what's available + page context
-      if (items.length === 0) {
-        // If on a product page where the current product is specific-eligible,
-        // start the customer on the specific threshold for friendlier UX.
-        var onSpecificProductPage =
-          currentProductId && allowedSet.has(String(currentProductId));
-        if (onSpecificProductPage) {
-          var specThr = bestSpecificThreshold({ items: [{ product_id: currentProductId }] });
-          if (specThr !== null) {
-            return { thresholdDollars: specThr, applicableCents: 0 };
-          }
-        }
-        // Otherwise fall back to all-products
-        var allThr = bestAllProductsThreshold();
-        if (allThr !== null) return { thresholdDollars: allThr, applicableCents: 0 };
-        // No all-products → fall back to lowest specific threshold (anything is better than nothing)
-        var lowestSpec = null;
-        for (var k = 0; k < specificCampaigns.length; k++) {
-          var t = parseFloat(specificCampaigns[k].minimumAmount);
-          if (!isNaN(t) && t > 0 && (lowestSpec === null || t < lowestSpec)) lowestSpec = t;
-        }
-        if (lowestSpec !== null) return { thresholdDollars: lowestSpec, applicableCents: 0 };
-        return null;
-      }
-
-      // CASE A: Pure specific cart — use specific threshold, count only specific items
-      if (hasSpecific && !hasNonSpecific) {
-        var thr = bestSpecificThreshold(cart);
-        if (thr === null) {
-          // Specific items in cart but no matching specific campaign threshold?
-          // Fall back to all-products.
-          var fallback = bestAllProductsThreshold();
-          if (fallback === null) return null;
-          return { thresholdDollars: fallback, applicableCents: cart.total_price || 0 };
-        }
-        var specCents = sumSpecificCents(cart, allowedSet);
-        return { thresholdDollars: thr, applicableCents: specCents };
-      }
-
-      // CASE B & C: Any non-specific item in cart — use max(specific, all-products)
-      // The progress counts the WHOLE cart (because all-products would fire on it).
-      var specT = bestSpecificThreshold(cart); // may be null if no specific matches
-      var allT = bestAllProductsThreshold();   // may be null if no all-products campaign
-
-      // If neither exists, no bar
-      if (specT === null && allT === null) return null;
-
-      // "Higher wins" — even if specific can't actually fire here, per the user's rule
-      var higher;
-      if (specT === null) higher = allT;
-      else if (allT === null) higher = specT;
-      else higher = Math.max(specT, allT);
-
-      return { thresholdDollars: higher, applicableCents: cart.total_price || 0 };
-    }
-
-    function update() {
+      // Initial render
       fetch('/cart.js', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(cart) {
-          if (!cart) return;
+          render(activeCampaign, cart);
+          setInterval(refresh, 2000);
 
-          var winner = pickThreshold(cart);
-          if (!winner || isNaN(winner.thresholdDollars) || winner.thresholdDollars <= 0) {
-            container.style.display = 'none';
-            return;
-          }
-
-          var threshold = winner.thresholdDollars;
-          var applicableCents = winner.applicableCents;
-          var applicable = applicableCents / 100;
-          var thresholdCents = threshold * 100;
-          var remaining = Math.max(0, threshold - applicable);
-          var progress = Math.min(100, (applicable / threshold) * 100);
-
-          container.style.display = 'block';
-          fillEl.style.width = progress + '%';
-
-          if (cart.item_count === 0) {
-            msgEl.innerHTML = initialMsg
-              .replace('{amount}', fmt(threshold))
-              .replace('{threshold}', threshold) + ' 🚚';
-          } else if (applicableCents >= thresholdCents) {
-            msgEl.innerHTML = '🎉 ' + successMsg;
-          } else {
-            msgEl.innerHTML = progressMsg
-              .replace('{amount}', fmt(remaining))
-              .replace('{threshold}', threshold) + ' 🚚';
-          }
-        })
-        .catch(function() {});
-    }
-
-    function startPollingAndObserve() {
-      update();
-      setInterval(update, 2000);
-
-      var cartForm = document.querySelector('form[action="/cart"], cart-items, .cart-items');
-      if (cartForm) {
-        var obs = new MutationObserver(function() {
-          setTimeout(update, 500);
+          var observer = new MutationObserver(function() { refresh(); });
+          observer.observe(document.body, { childList: true, subtree: true });
         });
-        obs.observe(cartForm, { childList: true, subtree: true, attributes: true });
-      }
-    }
-
-    // Load active free-shipping campaigns from proxy, split into specific vs all-products.
-    fetch('/apps/smartdiscounts?shop=' + encodeURIComponent(shop))
-      .then(function(r) {
-        if (!r.ok) throw new Error('proxy error');
-        return r.json();
-      })
-      .then(function(data) {
-        var campaigns = (data && data.campaigns) || [];
-        for (var i = 0; i < campaigns.length; i++) {
-          var c = campaigns[i];
-          if (!c) continue;
-          if (c.type !== 'shipping_discount') continue;
-          if (c.discountType !== 'free_shipping') continue;
-          if (c.status !== 'active') continue;
-          if (!(parseFloat(c.minimumAmount) > 0)) continue;
-
-          if (c.appliesTo === 'specific_products' && c.productIds && c.productIds.length > 0) {
-            specificCampaigns.push(c);
-          } else if (c.appliesTo === 'all' || !c.appliesTo) {
-            allProductsCampaigns.push(c);
-          }
-        }
-
-        if (specificCampaigns.length === 0 && allProductsCampaigns.length === 0) return;
-        startPollingAndObserve();
-      })
-      .catch(function() { /* proxy unreachable → stay hidden */ });
-  })();
-  </script>
+    })
+    .catch(function() {});
+});
+</script>
 {% endif %}
 
 {% schema %}
@@ -307,23 +194,12 @@
   "target": "section",
   "settings": [
     { "type": "checkbox", "id": "enabled", "label": "Enable shipping progress bar", "default": true },
-    {
-      "type": "paragraph",
-      "content": "Free shipping threshold is pulled from your active Free Shipping campaigns. In a cart with only specific-campaign products, the specific threshold is used. Otherwise the higher of (specific, all-products) is used."
-    },
-    { "type": "text", "id": "initial_message", "label": "Initial message", "default": "Add {amount} to unlock free shipping" },
-    { "type": "text", "id": "progress_message", "label": "Progress message", "default": "You're {amount} away from free shipping!" },
-    { "type": "text", "id": "success_message", "label": "Success message", "default": "You've unlocked free shipping!" },
-    { "type": "header", "content": "Card Style" },
-    { "type": "range", "id": "text_size", "label": "Text size", "min": 10, "max": 18, "step": 1, "default": 13, "unit": "px" },
-    { "type": "color", "id": "text_color", "label": "Text color", "default": "#000000" },
-    { "type": "color", "id": "bg_color", "label": "Background color", "default": "#FFFFFF" },
-    { "type": "color", "id": "border_color", "label": "Border color", "default": "#E0E0E0" },
-    { "type": "range", "id": "card_radius", "label": "Card border radius", "min": 0, "max": 20, "step": 1, "default": 8, "unit": "px" },
-    { "type": "header", "content": "Progress Bar Style" },
-    { "type": "color", "id": "progress_bg", "label": "Progress background", "default": "#E5E5E5" },
-    { "type": "color", "id": "progress_fg", "label": "Progress fill color", "default": "#10B981" },
-    { "type": "range", "id": "progress_radius", "label": "Progress border radius", "min": 0, "max": 10, "step": 1, "default": 4, "unit": "px" }
+    { "type": "text", "id": "success_message", "label": "Success message", "default": "🎉 You've unlocked free shipping!" },
+    { "type": "header", "content": "Colors" },
+    { "type": "color", "id": "bar_color",     "label": "Progress bar color", "default": "#1a1a1a" },
+    { "type": "color", "id": "success_color", "label": "Success bar color",  "default": "#10B981" },
+    { "type": "color", "id": "border_color",  "label": "Border color",       "default": "#E0E0E0" },
+    { "type": "range", "id": "border_radius", "label": "Border radius", "min": 0, "max": 20, "step": 1, "default": 8, "unit": "px" }
   ]
 }
 {% endschema %}

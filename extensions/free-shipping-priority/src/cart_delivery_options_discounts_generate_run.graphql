@@ -9,6 +9,7 @@ query DeliveryInput {
       id
     }
     lines {
+      quantity
       cost {
         subtotalAmount {
           amount

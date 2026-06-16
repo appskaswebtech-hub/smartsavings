@@ -47,6 +47,7 @@ model Campaign {
   minimumQuantity    Int?
   maximumQuantity    Int?
   minimumAmount      Float?    // Minimum order value (for shipping_discount, cart_goal, etc.)
+  requirementType  String?  @default("amount")
   geoTarget          String?   // "domestic" | "all" — for shipping_discount campaigns
   shopifyDiscountId  String?   // Discount node id returned by Shopify (so we can delete/update later)
    combineWithProducts  Boolean  @default(false)  // Stack with product discounts
