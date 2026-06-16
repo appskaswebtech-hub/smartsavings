@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Step-by-step setup guide for SmartSavings — Shopify discount campaigns, widgets, and free shipping. No technical knowledge needed.">
+<title>How to Use SmartSavings — Setup & Instructions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green:   #1a3566;
+    --green-l: #bfdbfe;
+    --green-bg:#eff6ff;
+    --ink:     #0f172a;
+    --mid:     #475569;
+    --soft:    #94a3b8;
+    --border:  #e2e8f0;
+    --surface: #f8fafc;
+    --white:   #ffffff;
+    --yellow:  #f59e0b;
+    --blue:    #3b82f6;
+    --purple:  #8b5cf6;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink);
+    background: var(--white);
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(255,255,255,.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+  }
+  .nav-inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 60px; gap: 24px;
+  }
+  .logo {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: 20px; color: var(--ink); text-decoration: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+  .nav-links { display: flex; gap: 24px; list-style: none; }
+  .nav-links a {
+    text-decoration: none; color: var(--mid); font-size: 14px; font-weight: 500;
+    transition: color .15s;
+  }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-cta {
+    background: var(--green); color: #fff; text-decoration: none;
+    padding: 8px 18px; border-radius: 8px; font-size: 14px; font-weight: 600;
+    transition: opacity .15s; white-space: nowrap;
+  }
+  .nav-cta:hover { opacity: .85; }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 50%, #fff 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 24px 72px;
+    text-align: center;
+  }
+  .hero-eyebrow {
+    display: inline-block; background: var(--green-l); color: var(--green);
+    font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    padding: 4px 12px; border-radius: 99px; margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: clamp(32px, 5vw, 52px); line-height: 1.1;
+    color: var(--ink); margin-bottom: 20px;
+  }
+  .hero h1 span { color: var(--green); }
+  .hero p {
+    max-width: 560px; margin: 0 auto 32px; color: var(--mid); font-size: 17px;
+  }
+  .hero-badges { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+  .badge {
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 99px; padding: 6px 14px;
+    font-size: 13px; font-weight: 500; color: var(--mid);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+  /* ── SECTION LAYOUT ── */
+  .section { padding: 72px 24px; }
+  .section:nth-child(even) { background: var(--surface); }
+  .container { max-width: 900px; margin: 0 auto; }
+  .section-eyebrow {
+    font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--green); margin-bottom: 12px;
+  }
+  .section-title {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: clamp(24px, 3vw, 34px); color: var(--ink);
+    margin-bottom: 16px; line-height: 1.2;
+  }
+  .section-intro {
+    color: var(--mid); font-size: 16px; max-width: 640px; margin-bottom: 48px;
+  }
+
+  /* ── STEPS ── */
+  .steps { display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: grid; grid-template-columns: 64px 1fr;
+    gap: 0 28px; position: relative;
+  }
+  .step:not(:last-child)::before {
+    content: ''; position: absolute; left: 31px; top: 52px;
+    width: 2px; bottom: -16px; background: var(--border);
+  }
+  .step-left { padding-top: 8px; display: flex; flex-direction: column; align-items: center; }
+  .step-num {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; flex-shrink: 0;
+    position: relative; z-index: 1;
+  }
+  .step-num.you   { background: var(--green); color: #fff; }
+  .step-num.auto  { background: var(--ink); color: #fff; }
+  .step-num.result{ background: var(--yellow); color: #fff; }
+  .step-tag {
+    font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--soft); margin-top: 8px; text-align: center;
+  }
+  .step-body { padding: 8px 0 48px; }
+  .step-body h3 { font-size: 18px; font-weight: 700; margin-bottom: 10px; color: var(--ink); }
+  .step-body p  { color: var(--mid); margin-bottom: 12px; }
+  .step-body ul { color: var(--mid); padding-left: 20px; }
+  .step-body li { margin-bottom: 6px; }
+  .callout {
+    background: var(--green-bg); border-left: 3px solid var(--green);
+    border-radius: 0 8px 8px 0; padding: 12px 16px; margin-top: 12px;
+    font-size: 14px; color: var(--ink);
+  }
+  .callout strong { color: var(--green); }
+
+  /* ── CAMPAIGN TYPES ── */
+  .campaign-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 16px; }
+  .campaign-card {
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; background: #fff;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .campaign-card:hover { border-color: var(--green); box-shadow: 0 4px 16px rgba(26,53,102,.12); }
+  .campaign-icon { font-size: 24px; margin-bottom: 10px; }
+  .campaign-name { font-weight: 700; font-size: 15px; margin-bottom: 6px; color: var(--ink); }
+  .campaign-desc { color: var(--mid); font-size: 13px; line-height: 1.55; }
+
+  /* ── WIDGETS ── */
+  .widget-list { display: flex; flex-direction: column; gap: 16px; }
+  .widget-row {
+    display: grid; grid-template-columns: 48px 1fr;
+    gap: 16px; align-items: start;
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; background: #fff;
+  }
+  .widget-icon-box {
+    width: 48px; height: 48px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
+  }
+  .widget-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+  .widget-desc { color: var(--mid); font-size: 14px; }
+  .widget-tag  {
+    display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .04em;
+    padding: 2px 8px; border-radius: 4px; margin-top: 6px;
+  }
+
+  /* ── TIPS ── */
+  .tips-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 16px; }
+  .tip {
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+  }
+  .tip-icon { font-size: 22px; margin-bottom: 10px; }
+  .tip h4   { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+  .tip p    { font-size: 13px; color: var(--mid); }
+
+  /* ── FAQ ── */
+  .faq-list { display: flex; flex-direction: column; gap: 12px; }
+  details {
+    border: 1px solid var(--border); border-radius: 12px;
+    background: #fff; overflow: hidden;
+  }
+  summary {
+    padding: 18px 20px; font-weight: 600; font-size: 15px; cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between;
+    list-style: none; user-select: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after {
+    content: '+'; font-size: 20px; font-weight: 300; color: var(--green);
+    flex-shrink: 0; margin-left: 12px;
+  }
+  details[open] summary::after { content: '−'; }
+  .faq-body { padding: 0 20px 18px; color: var(--mid); font-size: 14px; line-height: 1.7; }
+
+  /* ── CTA BANNER ── */
+  .cta-banner {
+    background: var(--ink); padding: 64px 24px; text-align: center;
+  }
+  .cta-banner h2 {
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: clamp(24px,3vw,36px);
+    color: #fff; margin-bottom: 12px;
+  }
+  .cta-banner p  { color: var(--soft); margin-bottom: 28px; font-size: 16px; }
+  .cta-buttons   { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn-primary {
+    background: var(--green); color: #fff; text-decoration: none;
+    padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px;
+    transition: opacity .15s;
+  }
+  .btn-primary:hover { opacity: .85; }
+  .btn-secondary {
+    background: transparent; color: #fff; text-decoration: none;
+    padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px;
+    border: 1px solid rgba(255,255,255,.3); transition: border-color .15s;
+  }
+  .btn-secondary:hover { border-color: #fff; }
+
+  /* ── FOOTER ── */
+  footer {
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 40px 24px; text-align: center;
+  }
+  .footer-inner { max-width: 900px; margin: 0 auto; }
+  .footer-links { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; margin-bottom: 16px; }
+  .footer-links a { text-decoration: none; color: var(--mid); font-size: 14px; }
+  .footer-links a:hover { color: var(--ink); }
+  .footer-copy { color: var(--soft); font-size: 13px; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .nav-links { display: none; }
+    .step { grid-template-columns: 48px 1fr; gap: 0 16px; }
+    .step:not(:last-child)::before { left: 23px; }
+    .step-num { width: 32px; height: 32px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="#">
+      <div class="logo-dot"></div>
+      SmartSavings
+    </a>
+    <ul class="nav-links">
+      <li><a href="#setup">Setup</a></li>
+      <li><a href="#campaigns">Campaign Types</a></li>
+      <li><a href="#widgets">Widgets</a></li>
+      <li><a href="#tips">Tips</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ul>
+    <a class="nav-cta" href="https://apps.shopify.com" target="_blank">Add to Shopify →</a>
+  </div>
+</nav>
+
+<!-- ── HERO ── -->
+<div class="hero">
+  <div class="hero-eyebrow">Setup Guide</div>
+  <h1>How to Use <span>SmartSavings</span></h1>
+  <p>Everything you need to create discount campaigns and add beautiful widgets to your Shopify store — explained step by step. No technical knowledge required.</p>
+  <div class="hero-badges">
+    <div class="badge"><div class="badge-dot"></div>6 discount campaign types</div>
+    <div class="badge"><div class="badge-dot"></div>8 storefront widgets</div>
+    <div class="badge"><div class="badge-dot"></div>Setup in under 10 minutes</div>
+  </div>
+</div>
+
+<!-- ── WHAT IT DOES ── -->
+<div class="section">
+  <div class="container">
+    <div class="section-eyebrow">What SmartSavings does for you — in plain English</div>
+    <p style="color:var(--mid);font-size:16px;max-width:720px;line-height:1.8;">
+      SmartSavings lets you create powerful discount campaigns — bulk price edits, quantity discounts, cart goals, buy X get Y, free shipping, and custom discount codes — and then display them automatically on your storefront using customisable widgets. Customers see exactly what savings they can unlock as they browse and shop, which encourages larger orders and drives more revenue for you.
+    </p>
+  </div>
+</div>
+
+<!-- ── SETUP STEPS ── -->
+<div class="section" id="setup">
+  <div class="container">
+    <div class="section-eyebrow">Getting Started</div>
+    <h2 class="section-title">Set Up SmartSavings in Minutes</h2>
+    <p class="section-intro">Follow these steps once. After that, your campaigns and widgets run on their own.</p>
+
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-left">
+          <div class="step-num you">1</div>
+          <div class="step-tag">You do this</div>
+        </div>
+        <div class="step-body">
+          <h3>Install SmartSavings from the Shopify App Store</h3>
+          <p>Go to the Shopify App Store and click <strong>"Add app"</strong> on the SmartSavings listing. You'll be taken to your Shopify admin and asked to confirm the installation — click <strong>"Install"</strong>.</p>
+          <div class="callout"><strong>Tip:</strong> Make sure you're logged in as the store owner or as a staff member with permission to install apps. If you manage multiple stores, double-check you're on the right one.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-left">
+          <div class="step-num auto">2</div>
+          <div class="step-tag">Automatic</div>
+        </div>
+        <div class="step-body">
+          <h3>SmartSavings connects to your store</h3>
+          <p>After installation, SmartSavings immediately connects to your Shopify store. It registers webhooks to stay in sync when discounts are created, updated, or deleted — so your app and Shopify are always in agreement.</p>
+          <p>No action is needed from you. This step completes in seconds.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-left">
+          <div class="step-num you">3</div>
+          <div class="step-tag">You do this</div>
+        </div>
+        <div class="step-body">
+          <h3>Choose a plan</h3>
+          <p>Open SmartSavings from your Shopify admin. You'll be shown the Plans page. Choose the plan that fits your store size — you can upgrade at any time as your needs grow.</p>
+          <div class="callout"><strong>Note:</strong> You cannot create campaigns until a plan is active. The plan screen appears automatically on first open.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-left">
+          <div class="step-num you">4</div>
+          <div class="step-tag">You do this</div>
+        </div>
+        <div class="step-body">
+          <h3>Create your first campaign</h3>
+          <p>Go to <strong>Campaigns → Create campaign</strong>. Pick the type of discount you want to offer:</p>
+          <ul>
+            <li><strong>Bulk price editor</strong> — apply a percentage or fixed discount across products</li>
+            <li><strong>Quantity discount</strong> — buy more, save more tiers</li>
+            <li><strong>Cart goal</strong> — unlock a discount when the cart reaches a spend threshold</li>
+            <li><strong>Shipping discount</strong> — free shipping above a spend or item count</li>
+            <li><strong>Buy X Get Y</strong> — buy a quantity and get a free or discounted item</li>
+            <li><strong>Advanced discount code</strong> — a single code for percentage, fixed, or free shipping</li>
+          </ul>
+          <p>Fill in the campaign details, choose your products, set a schedule, and click <strong>Save campaign</strong>. SmartSavings creates the discount on Shopify automatically.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-left">
+          <div class="step-num you">5</div>
+          <div class="step-tag">You do this</div>
+        </div>
+        <div class="step-body">
+          <h3>Add widgets to your theme</h3>
+          <p>Go to your Shopify admin → <strong>Online Store → Themes → Customise</strong>. Navigate to the page where you want a widget (product page, cart page, etc.) and click <strong>Add block</strong>. You'll see SmartSavings widgets listed — add the ones you need.</p>
+          <ul>
+            <li>Product page → <em>Shipping Progress Bar</em>, <em>Product Discounts</em>, <em>Quantity Table</em></li>
+            <li>Cart page → <em>Saving on Cart</em>, <em>Cart Goal</em>, <em>Discount Code Input</em></li>
+            <li>Any page → <em>Countdown Timer</em>, <em>Buy X Get Y</em></li>
+          </ul>
+          <div class="callout"><strong>Tip:</strong> Widgets read your active campaigns automatically. No extra configuration needed — just add the block and it appears when a matching campaign is live.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-left">
+          <div class="step-num auto">6</div>
+          <div class="step-tag">Automatic</div>
+        </div>
+        <div class="step-body">
+          <h3>Discounts apply automatically at checkout</h3>
+          <p>Once your campaign is active and a customer meets the conditions (spends enough, adds enough items, enters a code), the discount fires automatically at checkout. No coupon codes needed for automatic discounts — they just work.</p>
+          <p>Widgets update in real time as customers add or remove items — the progress bar fills, messages change, and the cart total reflects savings instantly.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-left">
+          <div class="step-num result">7</div>
+          <div class="step-tag">Result</div>
+        </div>
+        <div class="step-body">
+          <h3>Watch your average order value grow</h3>
+          <p>Customers who can see how close they are to a discount spend more to reach it. Your Campaigns page shows all active, scheduled, and expired campaigns — you can pause, activate, or delete any of them at any time.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── CAMPAIGN TYPES ── -->
+<div class="section" id="campaigns">
+  <div class="container">
+    <div class="section-eyebrow">Inside the App</div>
+    <h2 class="section-title">Campaign Types Explained</h2>
+    <p class="section-intro">SmartSavings has six types of discount campaigns. Here's what each one does and when to use it.</p>
+
+    <div class="campaign-grid">
+      <div class="campaign-card">
+        <div class="campaign-icon">🏷️</div>
+        <div class="campaign-name">Bulk Price Editor</div>
+        <div class="campaign-desc">Apply a percentage off, fixed amount off, or set a new price across your products. Great for sitewide sales, seasonal promotions, or category discounts.</div>
+      </div>
+      <div class="campaign-card">
+        <div class="campaign-icon">📦</div>
+        <div class="campaign-name">Quantity Discount</div>
+        <div class="campaign-desc">Set tiered discounts based on how many items a customer buys — for example, buy 2 save 5%, buy 4 save 10%, buy 8 save 15%. Encourages customers to buy more in one order.</div>
+      </div>
+      <div class="campaign-card">
+        <div class="campaign-icon">🎯</div>
+        <div class="campaign-name">Cart Goal</div>
+        <div class="campaign-desc">Unlock discounts when a customer's cart reaches a spend threshold. Set multiple tiers — spend $50 save 5%, spend $100 save 10%. The cart goal widget shows live progress.</div>
+      </div>
+      <div class="campaign-card">
+        <div class="campaign-icon">🚚</div>
+        <div class="campaign-name">Shipping Discount</div>
+        <div class="campaign-desc">Offer free shipping when customers meet a minimum spend, a minimum number of items, both conditions together, or either one. The shipping progress bar widget shows how close they are.</div>
+      </div>
+      <div class="campaign-card">
+        <div class="campaign-icon">🎁</div>
+        <div class="campaign-name">Buy X Get Y</div>
+        <div class="campaign-desc">Let customers choose a free or discounted item when they buy a set quantity. A popup widget shows eligible customers their gift options and lets them add it to the cart.</div>
+      </div>
+      <div class="campaign-card">
+        <div class="campaign-icon">🔑</div>
+        <div class="campaign-name">Advanced Discount Code</div>
+        <div class="campaign-desc">Create a single code that gives percentage off, fixed amount off, or free shipping. Customers enter it in the discount code widget on the cart page. Supports combining with other active discounts.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── WIDGETS ── -->
+<div class="section" id="widgets">
+  <div class="container">
+    <div class="section-eyebrow">Storefront Widgets</div>
+    <h2 class="section-title">What Each Widget Does</h2>
+    <p class="section-intro">Add these blocks to your theme in the Shopify theme editor. Each widget reads your live campaigns automatically.</p>
+
+    <div class="widget-list">
+
+      <div class="widget-row">
+        <div class="widget-icon-box" style="background:#eff6ff;">🚚</div>
+        <div>
+          <div class="widget-name">Shipping Progress Bar</div>
+          <div class="widget-desc">Shows a progress bar counting up to the free shipping threshold. Updates in real time as customers add items. Supports amount-only, quantity-only, both (AND), and either (OR) requirements. Shows the appropriate message for each stage — "Add $X more", "Add N more items", or "🎉 You've unlocked free shipping!"</div>
+          <span class="widget-tag" style="background:#eff6ff;color:#1a3566;">Product page · Cart page</span>
+        </div>
+      </div>
+
+      <div class="widget-row">
+        <div class="widget-icon-box" style="background:#eef2ff;">🎯</div>
+        <div>
+          <div class="widget-name">Cart Goal</div>
+          <div class="widget-desc">A stepper visualization where each discount tier appears as a milestone dot on a horizontal line. The line fills as the customer's cart total increases. Shows which tier they've unlocked and how much more they need to spend to reach the next one.</div>
+          <span class="widget-tag" style="background:#eef2ff;color:#3730a3;">Cart page · Product page</span>
+        </div>
+      </div>
+
+      <div class="widget-row">
+        <div class="widget-icon-box" style="background:#fffbeb;">🔥</div>
+        <div>
+          <div class="widget-name">Product Discounts</div>
+          <div class="widget-desc">Displays all active discounts that apply to the current product in a neat card — bulk savings, quantity tiers, free shipping eligibility, cart goals, and discount codes. Customers see all available deals in one place, which builds trust and encourages adding to cart.</div>
+          <span class="widget-tag" style="background:#fffbeb;color:#b45309;">Product page</span>
+        </div>
+      </div>
+
+      <div class="widget-row">
+        <div class="widget-icon-box" style="background:#fdf4ff;">🏷️</div>
+        <div>
+          <div class="widget-name">Discount Code Input</div>
+          <div class="widget-desc">A collapsible input that lets customers enter a discount code directly on the cart page without going to checkout. Detects when the code has been applied and shows a green confirmation. For free shipping codes (which only show at checkout), shows a friendly "submitted" message instead of an error.</div>
+          <span class="widget-tag" style="background:#fdf4ff;color:#7e22ce;">Cart page</span>
+        </div>
+      </div>
+
+      <div class="widget-row">
+        <div class="widget-icon-box" style="background:#eff6ff;">💰</div>
+        <div>
+          <div class="widget-name">Saving on Cart</div>
+          <div class="widget-desc">Shows a savings summary box listing each product, its original price, and the discounted price. Displays the total original cart value, total savings, and the new subtotal. Also adds visual strikethrough on cart item line prices so customers can see their savings at a glance.</div>
+          <span class="widget-tag" style="background:#eff6ff;color:#1a3566;">Cart page</span>
+        </div>
+      </div>
+
+      <div class="widget-row">
+        <div class="widget-icon-box" style="background:#fff1f2;">🎁</div>
+        <div>
+          <div class="widget-name">Buy X Get Y</div>
+          <div class="widget-desc">When a customer's cart qualifies for a Buy X Get Y reward, a popup appears letting them choose their free item from an eligible collection. They can select it and add it to the cart with one click — no need to browse back to the product page.</div>
+          <span class="widget-tag" style="background:#fff1f2;color:#be123c;">Any page</span>
+        </div>
+      </div>
+
+      <div class="widget-row">
+        <div class="widget-icon-box" style="background:#fefce8;">⏱️</div>
+        <div>
+          <div class="widget-name">Countdown Timer</div>
+          <div class="widget-desc">A live countdown to your campaign's end date. Creates urgency by showing customers exactly how much time is left to take advantage of the deal — days, hours, minutes, and seconds. Configure the label and style in the theme editor.</div>
+          <span class="widget-tag" style="background:#fefce8;color:#92400e;">Any page</span>
+        </div>
+      </div>
+
+      <div class="widget-row">
+        <div class="widget-icon-box" style="background:#eef2ff;">📊</div>
+        <div>
+          <div class="widget-name">Quantity Table</div>
+          <div class="widget-desc">Displays your quantity discount tiers in a clean table format — "Buy 2+ → Save 5%", "Buy 4+ → Save 10%", etc. Includes an optional coupon code input field below the table so customers can apply both a quantity discount and a code in one place.</div>
+          <span class="widget-tag" style="background:#eef2ff;color:#3730a3;">Product page</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── TIPS ── -->
+<div class="section" id="tips">
+  <div class="container">
+    <div class="section-eyebrow">Pro Tips</div>
+    <h2 class="section-title">Get the Most from SmartSavings</h2>
+    <p class="section-intro">Small things that make a big difference to your results.</p>
+
+    <div class="tips-grid">
+      <div class="tip">
+        <div class="tip-icon">🎯</div>
+        <h4>Stack shipping with cart goal</h4>
+        <p>Run a cart goal campaign (e.g. 10% off at $100) alongside a free shipping campaign (at $80). Customers who hit the shipping threshold get nudged again to spend a little more for the order discount.</p>
+      </div>
+      <div class="tip">
+        <div class="tip-icon">📊</div>
+        <h4>Use the Quantity Table on high-volume products</h4>
+        <p>For products customers often buy in multiples — consumables, gifts, apparel — the quantity table makes tiered savings visible and easy to understand, which directly increases the quantity added to cart.</p>
+      </div>
+      <div class="tip">
+        <div class="tip-icon">⏱️</div>
+        <h4>Pair a countdown timer with a bulk discount</h4>
+        <p>A countdown timer next to a sale discount creates genuine urgency. Set the campaign end date to the end of a promotion period and let the timer create the pressure.</p>
+      </div>
+      <div class="tip">
+        <div class="tip-icon">🔑</div>
+        <h4>Use the Discount Code widget for VIP codes</h4>
+        <p>Send a private discount code to your email subscribers or loyal customers. The Discount Code Input widget lets them apply it on the cart page before checkout — reducing friction and increasing conversion.</p>
+      </div>
+      <div class="tip">
+        <div class="tip-icon">🚚</div>
+        <h4>Try "Either" for free shipping</h4>
+        <p>The "Either — amount OR quantity" option means customers who buy 3+ items OR spend $100+ both unlock free shipping. It's more flexible and appeals to customers shopping for single expensive items as well as multiple cheaper ones.</p>
+      </div>
+      <div class="tip">
+        <div class="tip-icon">🎁</div>
+        <h4>Set up Buy X Get Y for bundles</h4>
+        <p>If you sell complementary products, Buy X Get Y is a powerful way to increase average order value. Customers who buy the main product get offered a free or discounted accessory — a natural upsell with no hard selling.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FAQ ── -->
+<div class="section" id="faq">
+  <div class="container">
+    <div class="section-eyebrow">FAQ</div>
+    <h2 class="section-title">Common Questions</h2>
+    <p class="section-intro">Answers to the questions merchants ask most.</p>
+
+    <div class="faq-list">
+
+      <details>
+        <summary>Do discounts apply automatically, or do customers need a code?</summary>
+        <div class="faq-body">Most campaign types (Bulk Price, Quantity Discount, Cart Goal, Shipping Discount, Buy X Get Y) create <strong>automatic discounts</strong> — customers don't need to enter anything. The discount fires as soon as the conditions are met at checkout. Only the <strong>Advanced Discount Code</strong> campaign requires customers to enter a code.</div>
+      </details>
+
+      <details>
+        <summary>Can I run multiple campaigns at the same time?</summary>
+        <div class="faq-body">Yes. You can run as many campaigns as your plan allows, and they can run simultaneously. Use the <strong>Discount combinations</strong> settings on each campaign to control whether it can stack with other active discounts at checkout.</div>
+      </details>
+
+      <details>
+        <summary>Do widgets update in real time as customers add items?</summary>
+        <div class="faq-body">Yes. All widgets poll the cart every 2 seconds and update instantly when items are added or removed. The shipping progress bar fills, the cart goal stepper advances, and savings totals update — without the page needing to reload.</div>
+      </details>
+
+      <details>
+        <summary>Why is the "Free shipping function not found" error appearing?</summary>
+        <div class="faq-body">This error appears when creating a shipping discount that requires the SmartSavings Shopify Function (used for "Both" and "Either" requirement types, and for specific-product free shipping). To fix it, run <code>npm run deploy</code> from your project folder. This deploys the extension including the function. After deploying, create the campaign again.</div>
+      </details>
+
+      <details>
+        <summary>The shipping progress bar shows a dollar amount but I set a quantity requirement. Why?</summary>
+        <div class="faq-body">This happens when an old campaign was created before the quantity feature was added, so the quantity value was saved in the wrong database field. Delete the campaign from the Campaigns page and recreate it with the correct requirement type selected. New campaigns save correctly.</div>
+      </details>
+
+      <details>
+        <summary>Can I apply discounts to specific products only?</summary>
+        <div class="faq-body">Yes. On the campaign creation form, the <strong>Products</strong> section lets you choose "All products", "Specific products", or "Specific collections". Discounts will only apply to the products you select. For free shipping on specific products, SmartSavings uses a Shopify Function to enforce this at checkout.</div>
+      </details>
+
+      <details>
+        <summary>How do I pause or stop a campaign?</summary>
+        <div class="faq-body">Go to <strong>Campaigns</strong> in the SmartSavings app. Find the campaign and click <strong>Pause</strong>. This deactivates the discount on Shopify so customers can no longer use it. You can reactivate it at any time by clicking <strong>Activate</strong>. To permanently remove it, click <strong>Delete</strong>.</div>
+      </details>
+
+      <details>
+        <summary>What happens to my campaigns if I uninstall SmartSavings?</summary>
+        <div class="faq-body">When you uninstall the app, Shopify automatically removes all automatic discounts created by SmartSavings. Any discount codes (Advanced Discount Code campaigns) may remain in your Shopify Discounts admin and should be manually deleted if no longer needed.</div>
+      </details>
+
+      <details>
+        <summary>Is my customer data safe?</summary>
+        <div class="faq-body">Yes. SmartSavings stores only campaign configuration data — no customer personal data is collected or stored by the app. All communication with Shopify is over HTTPS. See our Privacy Policy for full details.</div>
+      </details>
+
+      <details>
+        <summary>The discount code input widget isn't showing. What do I do?</summary>
+        <div class="faq-body">The widget shows by default (Always show = On). Check in your Shopify theme editor that the block is added to the cart page and that the <strong>Enable</strong> toggle is switched on in the block settings. If you've turned off "Always show", the widget only appears when you have an active Advanced Discount Code campaign in the app.</div>
+      </details>
+
+    </div>
+
+    <div style="margin-top:48px;padding:32px;background:var(--green-bg);border-radius:16px;text-align:center;">
+      <div style="font-size:22px;margin-bottom:8px;">💬</div>
+      <h3 style="font-size:18px;font-weight:700;margin-bottom:8px;">Still have questions?</h3>
+      <p style="color:var(--mid);margin-bottom:20px;">We're happy to help with setup questions, technical issues, or anything else about SmartSavings.</p>
+      <a href="mailto:apps.kaswebtech@gmail.com" style="display:inline-block;background:var(--green);color:#fff;text-decoration:none;padding:10px 22px;border-radius:8px;font-weight:600;font-size:14px;">Email Us →</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── CTA ── -->
+<div class="cta-banner">
+  <h2>Ready to start growing your revenue?</h2>
+  <p>Install SmartSavings and create your first discount campaign in minutes.</p>
+  <div class="cta-buttons">
+    <a href="https://apps.shopify.com" target="_blank" class="btn-primary">Add to Shopify →</a>
+    <a href="mailto:apps.kaswebtech@gmail.com" class="btn-secondary">Contact Support</a>
+  </div>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-links">
+      <a href="#">Home</a>
+      <a href="#setup">Setup Guide</a>
+      <a href="#campaigns">Campaign Types</a>
+      <a href="#widgets">Widgets</a>
+      <a href="#faq">FAQ</a>
+      <a href="#">Privacy Policy</a>
+      <a href="mailto:apps.kaswebtech@gmail.com">Contact</a>
+    </div>
+    <p class="footer-copy">© SmartSavings by KasWebTech. All rights reserved. Built for Shopify merchants worldwide.</p>
+  </div>
+</footer>
+
+</body>
+</html>
