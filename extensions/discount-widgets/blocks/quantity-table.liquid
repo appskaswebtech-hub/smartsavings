@@ -98,16 +98,30 @@ document.addEventListener('DOMContentLoaded', function() {
   var T = [];
   var lastQ = -1;
   var mode = box.dataset.mode || 'auto';
+  // Shopify only applies a fixed-amount discount "to each item" when the
+  // discount targets specific products/collections. When it targets all
+  // products, the amount is a flat amount spread across the order instead —
+  // not multiplied by quantity. This flag is set from the matched campaign's
+  // appliesTo before tiers are rendered.
+  var isPerItemDiscount = true;
 
   function showTable() { box.style.display = 'block'; }
   function hideTable() { box.style.display = 'none'; if (dpriceEl) dpriceEl.style.display = 'none'; }
   function showTiers() { if (tableContent) tableContent.style.display = 'block'; }
 
+  function tierLabel(t) {
+    if (t.type === 'fixed_amount') {
+      var amt = S + t.d.toFixed(2).replace(/\.00$/, '');
+      return isPerItemDiscount ? (amt + ' off each') : (amt + ' off order');
+    }
+    return t.d + '% off';
+  }
+
   function renderTiers(tiers) {
     T = tiers.sort(function(a,b){ return a.q - b.q; });
     var html = '';
     T.forEach(function(t) {
-      html += '<div class="sd-r" data-q="'+t.q+'" data-d="'+t.d+'" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;font-size:13px;color:'+tableTextColor+';border-top:1px solid rgba(0,0,0,0.06);transition:all 0.2s;"><span>'+t.q+'+</span><span style="color:'+savingsColor+';font-weight:600;">'+t.d+'% off</span></div>';
+      html += '<div class="sd-r" data-q="'+t.q+'" data-d="'+t.d+'" data-type="'+t.type+'" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;font-size:13px;color:'+tableTextColor+';border-top:1px solid rgba(0,0,0,0.06);transition:all 0.2s;"><span>'+t.q+'+</span><span style="color:'+savingsColor+';font-weight:600;">'+tierLabel(t)+'</span></div>';
     });
     tiersContainer.innerHTML = html;
     T.forEach(function(t, i) { t.el = tiersContainer.children[i]; });
@@ -115,6 +129,16 @@ document.addEventListener('DOMContentLoaded', function() {
     showTiers();
     lastQ = -1;
     go();
+  }
+
+  function mapTiers(rawTiers) {
+    return rawTiers.map(function(t) {
+      return {
+        q: parseInt(t.quantity || t.qty || t.q),
+        d: parseFloat(t.discount || t.disc || t.d),
+        type: t.discountType || t.type || 'percentage'
+      };
+    }).filter(function(t) { return !isNaN(t.q) && !isNaN(t.d); });
   }
 
   function fetchAndMatch(campaignName) {
@@ -155,10 +179,12 @@ document.addEventListener('DOMContentLoaded', function() {
     fetchAndMatch(null)
       .then(function(matched) {
         if (matched && matched.tiers && matched.tiers.length > 0) {
-          var tiers = matched.tiers.map(function(t) {
-            return { q: parseInt(t.quantity || t.qty || t.q), d: parseFloat(t.discount || t.disc || t.d) };
-          }).filter(function(t) { return !isNaN(t.q) && !isNaN(t.d); });
-          if (tiers.length > 0) { renderTiers(tiers); return; }
+          var tiers = mapTiers(matched.tiers);
+          if (tiers.length > 0) {
+            isPerItemDiscount = (matched.appliesTo === 'specific_products' || matched.appliesTo === 'specific_collections');
+            renderTiers(tiers);
+            return;
+          }
         }
         hideTable();
       })
@@ -203,13 +229,12 @@ document.addEventListener('DOMContentLoaded', function() {
       fetchAndMatch(code)
         .then(function(matched) {
           if (matched && matched.tiers && matched.tiers.length > 0) {
-            var tiers = matched.tiers.map(function(t) {
-              return { q: parseInt(t.quantity || t.qty || t.q), d: parseFloat(t.discount || t.disc || t.d) };
-            }).filter(function(t) { return !isNaN(t.q) && !isNaN(t.d); });
+            var tiers = mapTiers(matched.tiers);
 
             if (tiers.length > 0) {
               // Hide coupon section, show tiers
               couponSection.innerHTML = '<div style="padding:10px 16px;background:#f0fdf4;display:flex;justify-content:space-between;align-items:center;"><span style="color:#10b981;font-weight:700;font-size:13px;">✅ Coupon "' + code.toUpperCase() + '" applied!</span><button onclick="location.reload()" style="background:none;border:none;color:#999;font-size:12px;cursor:pointer;text-decoration:underline;">Remove</button></div>';
+              isPerItemDiscount = (matched.appliesTo === 'specific_products' || matched.appliesTo === 'specific_collections');
               renderTiers(tiers);
               return;
             }
@@ -245,15 +270,30 @@ document.addEventListener('DOMContentLoaded', function() {
     for (var i = 0; i < T.length; i++) { if (q < T[i].q) { nxt = T[i]; break; } }
     T.forEach(function(t) { if (t.el) { t.el.classList.remove('sd-tier-active'); t.el.style.background=''; t.el.style.borderLeft=''; t.el.style.fontWeight=''; } });
     if (act && act.el) act.el.classList.add('sd-tier-active');
-    var dp = act ? P*(1-act.d/100) : P;
-    var ts = act ? (P-dp)*q : 0;
+    var dp = P, ts = 0;
+    if (act) {
+      if (act.type === 'fixed_amount') {
+        if (isPerItemDiscount) {
+          dp = Math.max(0, P - act.d);
+          ts = (P - dp) * q;
+        } else {
+          var lineTotal = P * q;
+          ts = Math.min(act.d, lineTotal);
+          dp = q > 0 ? Math.max(0, (lineTotal - ts) / q) : P;
+        }
+      } else {
+        dp = P * (1 - act.d / 100);
+        ts = (P - dp) * q;
+      }
+    }
     if (act && calcEl) {
+      var perItemLabel = (act.type === 'fixed_amount' && !isPerItemDiscount) ? 'Avg. price per item:' : 'Price per item:';
       calcEl.style.display='block';
-      calcEl.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:13px;">Price per item:</span><span><s style="color:#999;font-size:12px;margin-right:6px;">'+S+P.toFixed(2)+'</s><b style="color:'+savingsColor+';font-size:15px;">'+S+dp.toFixed(2)+'</b></span></div><div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:13px;">Total savings:</span><b style="color:'+savingsColor+';font-size:14px;">-'+S+ts.toFixed(2)+' ('+act.d+'% off)</b></div>';
+      calcEl.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:13px;">'+perItemLabel+'</span><span><s style="color:#999;font-size:12px;margin-right:6px;">'+S+P.toFixed(2)+'</s><b style="color:'+savingsColor+';font-size:15px;">'+S+dp.toFixed(2)+'</b></span></div><div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:13px;">Total savings:</span><b style="color:'+savingsColor+';font-size:14px;">-'+S+ts.toFixed(2)+' ('+tierLabel(act)+')</b></div>';
     } else if (calcEl) calcEl.style.display='none';
     if (hintEl) {
-      if (!act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more to unlock '+nxt.d+'% off!'; }
-      else if (act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more for '+nxt.d+'% off (saving '+act.d+'% now)'; }
+      if (!act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more to unlock '+tierLabel(nxt)+'!'; }
+      else if (act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more for '+tierLabel(nxt)+' (saving '+tierLabel(act)+' now)'; }
       else hintEl.style.display='none';
     }
     if (realPrice) {
@@ -266,10 +306,16 @@ document.addEventListener('DOMContentLoaded', function() {
           '</div>';
         // Hide the separate overlay
         if (dpriceEl) {
+          var badgeText = act.type === 'fixed_amount'
+            ? (S + act.d + (isPerItemDiscount ? ' OFF EACH' : ' OFF ORDER'))
+            : (act.d + '% OFF');
+          var savingsContext = (act.type === 'fixed_amount' && !isPerItemDiscount)
+            ? 'on your order'
+            : ('on ' + q + ' item' + (q > 1 ? 's' : ''));
           dpriceEl.style.display = 'block';
           dpriceEl.innerHTML =
-            '<div style="font-size:0.85em;color:' + savingsColor + ';font-weight:600;margin-top:2px;">You save ' + S + ts.toFixed(2) + ' on ' + q + ' item' + (q > 1 ? 's' : '') +
-            ' <span style="background:' + savingsColor + ';color:#fff;padding:2px 8px;border-radius:4px;font-size:0.8em;font-weight:700;margin-left:4px;">SAVE ' + act.d + '%</span></div>';
+            '<div style="font-size:0.85em;color:' + savingsColor + ';font-weight:600;margin-top:2px;">You save ' + S + ts.toFixed(2) + ' ' + savingsContext +
+            ' <span style="background:' + savingsColor + ';color:#fff;padding:2px 8px;border-radius:4px;font-size:0.8em;font-weight:700;margin-left:4px;">SAVE ' + badgeText + '</span></div>';
         }
       } else {
         // Restore original price
