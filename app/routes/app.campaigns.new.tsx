@@ -2202,7 +2202,7 @@ function DiscountPreview({
 }: {
   type: string; name: string; discountType: string; discountValue: string;
   tiers: { quantity: string; discount: string; discountType?: string }[];
-  cartTiers: { amount: string; discount: string }[];
+  cartTiers: { amount: string; discount: string; discountType?: string }[];
   freeShipping: boolean; minOrderForShipping: string; minQuantityForShipping: string;
   requirementType: string; appliesTo: string; status: string;
   bxgyDiscountPct: string;
@@ -2220,19 +2220,15 @@ function DiscountPreview({
 
   const getCartGoalDiscount = (totalAmount: number) => {
     const validTiers = cartTiers.filter(t => t.amount && t.discount)
-      .map(t => ({ amount: parseFloat(t.amount), discount: parseFloat(t.discount) }))
-      .filter(t => !isNaN(t.amount) && !isNaN(t.discount)).sort((a, b) => b.amount - a.amount);
-    const match = validTiers.find(t => totalAmount >= t.amount);
-    return match ? match.discount : 0;
+      .map(t => ({ amount: parseFloat(t.amount), discount: parseFloat(t.discount), discountType: t.discountType || "percentage" }))
+      .filter(t => !isNaN(t.amount) && !isNaN(t.discount) && t.discount > 0).sort((a, b) => b.amount - a.amount);
+    return validTiers.find(t => totalAmount >= t.amount) || null;
   };
 
   const cartTotal = samplePrice * cartQty;
   let discountPercent = 0, discountAmount = 0, finalTotal = cartTotal;
   const activeQuantityTier = type === "quantity_discount" ? getQuantityDiscount(cartQty) : null;
-  // Shopify only allows a fixed-amount discount to apply "to each item" when the
-  // discount targets specific products/collections. When it targets all products,
-  // Shopify requires the amount to be spread across the order instead — it's a
-  // flat amount, not multiplied by quantity.
+  const activeCartTier = type === "cart_goal" ? getCartGoalDiscount(cartTotal) : null;
   const quantityTierIsPerItem = appliesTo === "specific_products" || appliesTo === "specific_collections";
   if (type === "bulk_price") {
     if (discountType === "percentage") { discountPercent = discountVal; discountAmount = cartTotal * (discountVal / 100); }
@@ -2247,8 +2243,13 @@ function DiscountPreview({
       discountPercent = activeQuantityTier.discount;
       discountAmount = cartTotal * (discountPercent / 100);
     }
-  } else if (type === "cart_goal") {
-    discountPercent = getCartGoalDiscount(cartTotal); discountAmount = cartTotal * (discountPercent / 100);
+  } else if (type === "cart_goal" && activeCartTier) {
+    if (activeCartTier.discountType === "fixed_amount") {
+      discountAmount = Math.min(activeCartTier.discount, cartTotal);
+    } else {
+      discountPercent = activeCartTier.discount;
+      discountAmount = cartTotal * (discountPercent / 100);
+    }
   }
   discountAmount = Math.max(0, discountAmount);
   finalTotal = Math.max(0, cartTotal - discountAmount);
@@ -2312,10 +2313,12 @@ function DiscountPreview({
               <Box padding="200" background="bg-surface" borderRadius="200">
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm" fontWeight="bold">Spend more, Save more!</Text>
-                  {cartTiers.filter(t => t.amount && t.discount).map((tier, i) => (
+                  {cartTiers.filter(t => t.amount && t.discount && parseFloat(t.discount) > 0).map((tier, i) => (
                     <InlineStack key={i} align="space-between">
                       <Text as="span" variant="bodySm">Spend ${tier.amount}+</Text>
-                      <Badge tone="success">{`Save ${tier.discount}%`}</Badge>
+                      <Badge tone="success">
+                        {tier.discountType === "fixed_amount" ? `Save $${tier.discount}` : `Save ${tier.discount}%`}
+                      </Badge>
                     </InlineStack>
                   ))}
                 </BlockStack>
@@ -2377,9 +2380,13 @@ function DiscountPreview({
                     </Text>
                   </Box>
                 )}
-                {type === "cart_goal" && discountPercent > 0 && (
+                {type === "cart_goal" && activeCartTier && (
                   <Box padding="200" background="bg-surface-success" borderRadius="200">
-                    <Text as="p" variant="bodySm" tone="success" alignment="center" fontWeight="bold">{discountPercent}% discount applied (cart: ${cartTotal.toFixed(2)})</Text>
+                    <Text as="p" variant="bodySm" tone="success" alignment="center" fontWeight="bold">
+                      {activeCartTier.discountType === "fixed_amount"
+                        ? `$${activeCartTier.discount} off your order (cart: $${cartTotal.toFixed(2)})`
+                        : `${activeCartTier.discount}% discount applied (cart: $${cartTotal.toFixed(2)})`}
+                    </Text>
                   </Box>
                 )}
                 <Divider />
@@ -2446,7 +2453,14 @@ export default function NewCampaign() {
     { quantity: "4", discount: "10", discountType: "percentage" },
     { quantity: "8", discount: "15", discountType: "percentage" },
   ]);
-  const [cartTiers, setCartTiers] = useState([{ amount: "50", discount: "5" }, { amount: "100", discount: "10" }, { amount: "150", discount: "15" }]);
+  // Global discount type — all tiers share the same type
+  const [tierDiscountType, setTierDiscountType] = useState<"percentage" | "fixed_amount">("percentage");
+  const [cartTiers, setCartTiers] = useState([
+    { amount: "50", discount: "5", discountType: "percentage" },
+    { amount: "100", discount: "10", discountType: "percentage" },
+    { amount: "150", discount: "15", discountType: "percentage" },
+  ]);
+  const [cartTierDiscountType, setCartTierDiscountType] = useState<"percentage" | "fixed_amount">("percentage");
   const [freeShipping] = useState(true);
   const [bxgyDiscountPct, setBxgyDiscountPct] = useState("10"); // separate state for BxGy discount %
   const [minOrderForShipping, setMinOrderForShipping] = useState("");
@@ -2532,10 +2546,6 @@ export default function NewCampaign() {
     const n = [...tiers]; n[index][field] = value; setTiers(n);
   };
 
-  const updateTierType = (index: number, value: string) => {
-    const n = [...tiers]; n[index] = { ...n[index], discountType: value }; setTiers(n);
-  };
-
   const updateCartTier = (index: number, field: "amount" | "discount", value: string) => {
     const num = parseFloat(value);
     if (value !== "" && num < 0) return;
@@ -2563,15 +2573,44 @@ export default function NewCampaign() {
     return { known: true, total };
   };
 
-  const priceCeiling = type === "quantity_discount" ? getSelectedProductsPriceCeiling() : { known: false, total: 0 };
+  const priceCeiling = (type === "quantity_discount" && tierDiscountType === "fixed_amount") ? getSelectedProductsPriceCeiling() : { known: false, total: 0 };
+
+  // Quantities that appear more than once across tiers — used for inline field errors
+  const duplicateTierQtys = new Set(
+    tiers
+      .map((t) => t.quantity)
+      .filter((q) => q !== "" && tiers.filter((t) => t.quantity === q).length > 1)
+  );
+
+  // Spend amounts that appear more than once across cart goal tiers
+  const duplicateCartAmounts = new Set(
+    cartTiers
+      .map((t) => t.amount)
+      .filter((a) => a !== "" && cartTiers.filter((t) => t.amount === a).length > 1)
+  );
 
   const handleSave = () => {
     if (isFreeShippingCampaign && !geoTarget) {
       shopify.toast.show("Please choose where free shipping applies (Domestic or All zones).", { isError: true });
       return;
     }
+    if (type === "quantity_discount") {
+      const zeroQty = tiers.find((t) => !t.quantity || parseInt(t.quantity) <= 0);
+      if (zeroQty) {
+        shopify.toast.show("Minimum quantity must be greater than 0 for all tiers.", { isError: true });
+        return;
+      }
+    }
+    if (type === "quantity_discount" && duplicateTierQtys.size > 0) {
+      shopify.toast.show("Each tier must have a unique minimum quantity. Remove or fix the duplicate quantities.", { isError: true });
+      return;
+    }
+    if (type === "cart_goal" && duplicateCartAmounts.size > 0) {
+      shopify.toast.show("Each cart goal tier must have a unique minimum spend amount.", { isError: true });
+      return;
+    }
     if (type === "quantity_discount" && priceCeiling.known) {
-      const tooHigh = tiers.find((t) => t.discountType === "fixed_amount" && parseFloat(t.discount || "0") > priceCeiling.total);
+      const tooHigh = tiers.find((t) => tierDiscountType === "fixed_amount" && parseFloat(t.discount || "0") > priceCeiling.total);
       if (tooHigh) {
         shopify.toast.show(`Buy ${tooHigh.quantity}+ discount exceeds the selected products' combined price ($${priceCeiling.total.toFixed(2)}).`, { isError: true });
         return;
@@ -2609,8 +2648,8 @@ export default function NewCampaign() {
     }
     if (selectedCollections.length > 0) formData.append("collectionIds", JSON.stringify(selectedCollections.map(c => c.id)));
     if (type === "buy_x_get_y") formData.append("bxgyDiscountPct", bxgyDiscountPct || "10");
-    if (type === "quantity_discount") formData.append("tiers", JSON.stringify(tiers));
-    else if (type === "cart_goal") formData.append("tiers", JSON.stringify(cartTiers));
+    if (type === "quantity_discount") formData.append("tiers", JSON.stringify(tiers.map((t) => ({ ...t, discountType: tierDiscountType }))));
+    else if (type === "cart_goal") formData.append("tiers", JSON.stringify(cartTiers.map((t) => ({ ...t, discountType: cartTierDiscountType }))));
     submit(formData, { method: "post" });
   };
 
@@ -2655,31 +2694,52 @@ export default function NewCampaign() {
                 {type === "quantity_discount" && (
                   <BlockStack gap="400">
                     <Text as="p" variant="bodySm" tone="subdued">Set up tiered discounts based on quantity purchased.</Text>
+                    <Select
+                      label="Discount type"
+                      options={[
+                        { label: "Percentage off", value: "percentage" },
+                        { label: "Fixed amount off", value: "fixed_amount" },
+                      ]}
+                      value={tierDiscountType}
+                      onChange={(v) => {
+                        const t = v as "percentage" | "fixed_amount";
+                        setTierDiscountType(t);
+                        setTiers((prev) => prev.map((tier) => ({ ...tier, discountType: t })));
+                      }}
+                    />
                     {tiers.map((tier, i) => (
                       <InlineStack key={i} gap="200" blockAlign="end">
                         <div style={{ flex: 1 }}>
-                          <TextField label={i === 0 ? "Min quantity" : ""} type="number" min={0} value={tier.quantity} onChange={(v) => updateTier(i, "quantity", v)} autoComplete="off" prefix="Buy" suffix="+" />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <Select
-                            label={i === 0 ? "Discount type" : ""}
-                            options={[{ label: "Percentage", value: "percentage" }, { label: "Fixed amount", value: "fixed_amount" }]}
-                            value={tier.discountType || "percentage"}
-                            onChange={(v) => updateTierType(i, v)}
+                          <TextField
+                            label={i === 0 ? "Min quantity" : ""}
+                            type="number" min={0}
+                            value={tier.quantity}
+                            onChange={(v) => updateTier(i, "quantity", v)}
+                            autoComplete="off"
+                            prefix="Buy"
+                            suffix="+"
+                            error={
+                              (tier.quantity === "0" || (tier.quantity !== "" && parseInt(tier.quantity) <= 0))
+                                ? "Must be greater than 0"
+                                : (tier.quantity && duplicateTierQtys.has(tier.quantity)
+                                    ? "Duplicate — each tier needs a unique quantity"
+                                    : undefined)
+                            }
                           />
                         </div>
                         <div style={{ flex: 1 }}>
                           <TextField
                             label={i === 0 ? "Discount value" : ""}
-                            type="number" min={0}
+                            type="number"
+                            min={0}
                             value={tier.discount}
                             onChange={(v) => updateTier(i, "discount", v)}
                             autoComplete="off"
-                            prefix={tier.discountType === "fixed_amount" ? "Save $" : "Save"}
-                            suffix={tier.discountType === "fixed_amount" ? undefined : "%"}
+                            prefix={tierDiscountType === "fixed_amount" ? "Save $" : "Save"}
+                            suffix={tierDiscountType === "fixed_amount" ? undefined : "%"}
                             error={
-                              tier.discountType === "fixed_amount" && priceCeiling.known && parseFloat(tier.discount || "0") > priceCeiling.total
-                                ? `Exceeds the selected products' combined price ($${priceCeiling.total.toFixed(2)})`
+                              tierDiscountType === "fixed_amount" && priceCeiling.known && parseFloat(tier.discount || "0") > priceCeiling.total
+                                ? `Exceeds selected products' combined price ($${priceCeiling.total.toFixed(2)})`
                                 : undefined
                             }
                           />
@@ -2687,12 +2747,12 @@ export default function NewCampaign() {
                         <Button tone="critical" size="slim" onClick={() => setTiers(tiers.filter((_, j) => j !== i))} disabled={tiers.length <= 1}>Remove</Button>
                       </InlineStack>
                     ))}
-                    {tiers.some((t) => t.discountType === "fixed_amount") && !(appliesTo === "specific_products" || appliesTo === "specific_collections") && (
+                    {tierDiscountType === "fixed_amount" && !(appliesTo === "specific_products" || appliesTo === "specific_collections") && (
                       <Banner tone="info">
                         <p>With "Applies to: All products" (set below), Shopify requires fixed-amount tiers to apply once per order rather than per item. Choose "Specific products" or "Specific collections" below if you want the amount to apply per item instead.</p>
                       </Banner>
                     )}
-                    <div><Button size="slim" onClick={() => setTiers([...tiers, { quantity: "", discount: "", discountType: "percentage" }])}>Add tier</Button></div>
+                    <div><Button size="slim" onClick={() => setTiers([...tiers, { quantity: "", discount: "", discountType: tierDiscountType }])}>Add tier</Button></div>
                   </BlockStack>
                 )}
 
@@ -2753,14 +2813,51 @@ export default function NewCampaign() {
                 {type === "cart_goal" && (
                   <BlockStack gap="400">
                     <Text as="p" variant="bodySm" tone="subdued">Set minimum cart values and their corresponding discounts.</Text>
+                    <Select
+                      label="Discount type"
+                      options={[
+                        { label: "Percentage off", value: "percentage" },
+                        { label: "Fixed amount off", value: "fixed_amount" },
+                      ]}
+                      value={cartTierDiscountType}
+                      onChange={(v) => {
+                        const t = v as "percentage" | "fixed_amount";
+                        setCartTierDiscountType(t);
+                        setCartTiers((prev) => prev.map((tier) => ({ ...tier, discountType: t })));
+                      }}
+                    />
                     {cartTiers.map((tier, i) => (
                       <InlineStack key={i} gap="200" blockAlign="end">
-                        <div style={{ flex: 1 }}><TextField label={i === 0 ? "Min cart value" : ""} type="number" min={0} value={tier.amount} onChange={(v) => updateCartTier(i, "amount", v)} autoComplete="off" prefix="$" /></div>
-                        <div style={{ flex: 1 }}><TextField label={i === 0 ? "Discount %" : ""} type="number" min={0} value={tier.discount} onChange={(v) => updateCartTier(i, "discount", v)} autoComplete="off" prefix="Save" suffix="%" /></div>
+                        <div style={{ flex: 1 }}>
+                          <TextField
+                            label={i === 0 ? "Min cart value" : ""}
+                            type="number" min={0}
+                            value={tier.amount}
+                            onChange={(v) => updateCartTier(i, "amount", v)}
+                            autoComplete="off"
+                            prefix="$"
+                            error={
+                              tier.amount && duplicateCartAmounts.has(tier.amount)
+                                ? "Duplicate — each tier needs a unique spend amount"
+                                : undefined
+                            }
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <TextField
+                            label={i === 0 ? "Discount value" : ""}
+                            type="number" min={0}
+                            value={tier.discount}
+                            onChange={(v) => updateCartTier(i, "discount", v)}
+                            autoComplete="off"
+                            prefix={cartTierDiscountType === "fixed_amount" ? "Save $" : "Save"}
+                            suffix={cartTierDiscountType === "fixed_amount" ? undefined : "%"}
+                          />
+                        </div>
                         <Button tone="critical" size="slim" onClick={() => setCartTiers(cartTiers.filter((_, j) => j !== i))} disabled={cartTiers.length <= 1}>Remove</Button>
                       </InlineStack>
                     ))}
-                    <div><Button size="slim" onClick={() => setCartTiers([...cartTiers, { amount: "", discount: "" }])}>Add tier</Button></div>
+                    <div><Button size="slim" onClick={() => setCartTiers([...cartTiers, { amount: "", discount: "", discountType: cartTierDiscountType }])}>Add tier</Button></div>
                   </BlockStack>
                 )}
 
