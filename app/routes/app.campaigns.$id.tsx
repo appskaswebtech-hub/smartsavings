@@ -948,6 +948,8 @@
 //           fetch("/app/campaigns", { method: "POST", body: fd })
 //             .then(() => window.location.reload());
 //         },
+        
+        
 //       }}
 //       secondaryActions={[{
 //         content: "Delete", destructive: true,
@@ -1217,12 +1219,15 @@
 //   );
 // }
 
+
+
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useNavigate } from "@remix-run/react";
+import { useLoaderData, useNavigate, useFetcher, useRevalidator } from "@remix-run/react";
 import {
   Page, Card, Text, BlockStack, InlineStack, Badge, Box, Divider,
   InlineGrid, Banner, Thumbnail,
 } from "@shopify/polaris";
+import { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
@@ -1236,7 +1241,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Campaign not found", { status: 404 });
   }
 
-  // ── Resolve products AND variants ──────────────────────────────────
   type ProductEntry = {
     id: string; title: string; image: string | null;
     variants: { id: string; title: string; price: string; sku: string }[];
@@ -1246,29 +1250,23 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   let productEntries: ProductEntry[] = [];
   let collectionNames: string[] = [];
 
-  // Derive effective appliesTo: productIds/collectionIds take priority
-  // over the stored appliesTo field (legacy campaigns may have wrong appliesTo).
   const hasProductIds = !!campaign.productIds && campaign.productIds !== "[]";
   const hasCollectionIds = !!campaign.collectionIds && campaign.collectionIds !== "[]";
   const effectiveAppliesTo =
-    hasProductIds     ? "specific_products" :
-    hasCollectionIds  ? "specific_collections" :
+    hasProductIds    ? "specific_products" :
+    hasCollectionIds ? "specific_collections" :
     campaign.appliesTo || "all";
 
   if (effectiveAppliesTo === "specific_products" && campaign.productIds) {
     try {
       const ids = JSON.parse(campaign.productIds) as string[];
-
-      // Separate product GIDs from variant GIDs
       const productGids = ids.filter(id => id.includes("/Product/") && !id.includes("/ProductVariant/"));
       const variantGids = ids.filter(id => id.includes("/ProductVariant/"));
 
-      // ── Fetch products (all-variant selections) ──
       if (productGids.length > 0) {
         const q = productGids.slice(0, 20).map((id, i) =>
           `p${i}: product(id: "${id}") {
-            id title
-            featuredImage { url }
+            id title featuredImage { url }
             variants(first: 100) { nodes { id title price sku } }
           }`
         ).join("\n");
@@ -1287,7 +1285,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         }
       }
 
-      // ── Fetch specific variants ──
       if (variantGids.length > 0) {
         const q = variantGids.slice(0, 50).map((id, i) =>
           `v${i}: productVariant(id: "${id}") {
@@ -1297,8 +1294,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         ).join("\n");
         const res = await admin.graphql(`#graphql query { ${q} }`);
         const result = await res.json();
-
-        // Group by parent product
         const byProduct = new Map<string, ProductEntry>();
         for (const v of Object.values(result.data || {}) as any[]) {
           if (!v?.title || !v?.product) continue;
@@ -1307,13 +1302,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
             byProduct.set(pid, {
               id: pid, title: v.product.title,
               image: v.product.featuredImage?.url || null,
-              variants: [],
-              selectedVariants: [],
+              variants: [], selectedVariants: [],
             });
           }
           (byProduct.get(pid)!.selectedVariants as any[]).push({
-            id: v.id, title: v.title,
-            price: v.price, sku: v.sku || "",
+            id: v.id, title: v.title, price: v.price, sku: v.sku || "",
           });
         }
         productEntries.push(...byProduct.values());
@@ -1335,11 +1328,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     } catch {}
   }
 
-  // Parse tiers
   let tiers: any[] = [];
   if (campaign.tiers) { try { tiers = JSON.parse(campaign.tiers); } catch {} }
 
-  // Shopify discount status + product data from the actual Shopify discount
   let shopifyDiscounts: any[] = [];
   let shopifyProducts: { id: string; title: string; image: string | null; variants?: { id: string; title: string }[]; selectedVariants?: "all" | { id: string; title: string }[] }[] = [];
 
@@ -1356,15 +1347,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
                 customerGets {
                   items {
                     ... on DiscountProducts {
-                      products(first: 20) {
-                        nodes { id title featuredImage { url } }
-                      }
-                      productVariants(first: 50) {
-                        nodes {
-                          id title
-                          product { id title featuredImage { url } }
-                        }
-                      }
+                      products(first: 20) { nodes { id title featuredImage { url } } }
+                      productVariants(first: 50) { nodes { id title product { id title featuredImage { url } } } }
                     }
                     ... on AllDiscountItems { allItems }
                   }
@@ -1375,15 +1359,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
                 customerBuys {
                   items {
                     ... on DiscountProducts {
-                      products(first: 20) {
-                        nodes { id title featuredImage { url } }
-                      }
-                      productVariants(first: 50) {
-                        nodes {
-                          id title
-                          product { id title featuredImage { url } }
-                        }
-                      }
+                      products(first: 20) { nodes { id title featuredImage { url } } }
+                      productVariants(first: 50) { nodes { id title product { id title featuredImage { url } } } }
                     }
                     ... on AllDiscountItems { allItems }
                   }
@@ -1397,15 +1374,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
                 customerGets {
                   items {
                     ... on DiscountProducts {
-                      products(first: 20) {
-                        nodes { id title featuredImage { url } }
-                      }
-                      productVariants(first: 50) {
-                        nodes {
-                          id title
-                          product { id title featuredImage { url } }
-                        }
-                      }
+                      products(first: 20) { nodes { id title featuredImage { url } } }
+                      productVariants(first: 50) { nodes { id title product { id title featuredImage { url } } } }
                     }
                     ... on AllDiscountItems { allItems }
                   }
@@ -1429,59 +1399,35 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       code: n.discount?.codes?.nodes?.[0]?.code || null,
     }));
 
-    // ── Extract product data from Shopify discount items ──
-    // This is the source of truth when productIds is null in our DB.
     if (productEntries.length === 0) {
       const productMap = new Map<string, typeof shopifyProducts[0]>();
       const variantsByProduct = new Map<string, { id: string; title: string }[]>();
 
       for (const node of matchingNodes) {
-        // Check both customerBuys.items (BxGy) and customerGets.items (Basic/Code discounts)
-        // BxGy: products are in customerBuys (what customer must buy)
-        // Basic: products are in customerGets (what customer receives the discount on)
         const itemSources = [
           node.discount?.customerBuys?.items,
           node.discount?.customerGets?.items,
         ].filter(Boolean);
 
         for (const items of itemSources) {
-          if (!items) continue;
-
-          // All-products discount — skip
-          if (items.allItems === true) continue;
-
-          // Specific products
+          if (!items || items.allItems === true) continue;
           for (const p of items.products?.nodes || []) {
-            if (!productMap.has(p.id)) {
-              productMap.set(p.id, { id: p.id, title: p.title, image: p.featuredImage?.url || null });
-            }
+            if (!productMap.has(p.id)) productMap.set(p.id, { id: p.id, title: p.title, image: p.featuredImage?.url || null });
           }
-
-          // Specific variants — group by parent product
           for (const v of items.productVariants?.nodes || []) {
-            const pid = v.product?.id;
-            if (!pid) continue;
-            if (!productMap.has(pid)) {
-              productMap.set(pid, { id: pid, title: v.product.title, image: v.product.featuredImage?.url || null });
-            }
+            const pid = v.product?.id; if (!pid) continue;
+            if (!productMap.has(pid)) productMap.set(pid, { id: pid, title: v.product.title, image: v.product.featuredImage?.url || null });
             if (!variantsByProduct.has(pid)) variantsByProduct.set(pid, []);
             variantsByProduct.get(pid)!.push({ id: v.id, title: v.title });
           }
-        } // end itemSources loop
-      } // end matchingNodes loop
+        }
+      }
 
-      // Build shopifyProducts — normalized to match productEntries shape
       for (const [pid, product] of productMap.entries()) {
         const specificVariants = variantsByProduct.get(pid);
         shopifyProducts.push({
-          ...product,
-          // variants = specific variants selected, or empty when whole product is selected
-          variants: [],
-          // selectedVariants: "all" when whole product is targeted,
-          // or array of specific variants when individual variants are targeted
-          selectedVariants: specificVariants && specificVariants.length > 0
-            ? specificVariants
-            : "all" as const,
+          ...product, variants: [],
+          selectedVariants: specificVariants?.length ? specificVariants : "all" as const,
         });
       }
     }
@@ -1496,11 +1442,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       createdAt: new Date(campaign.createdAt).toLocaleString(),
       updatedAt: new Date(campaign.updatedAt).toLocaleString(),
     },
-    tiers,
-    productEntries,
-    shopifyProducts,     // products fetched directly from Shopify discount
-    collectionNames,
-    shopifyDiscounts,
+    tiers, productEntries, shopifyProducts, collectionNames, shopifyDiscounts,
   });
 };
 
@@ -1517,10 +1459,43 @@ const DISCOUNT_TYPE_LABELS: Record<string, string> = {
 
 export default function CampaignDetail() {
   const { campaign, tiers, productEntries, shopifyProducts, collectionNames, shopifyDiscounts } = useLoaderData<typeof loader>();
-
-  // Use DB products if available, otherwise fall back to Shopify-fetched products
   const displayProducts = productEntries.length > 0 ? productEntries : shopifyProducts;
   const navigate = useNavigate();
+
+  // ── useFetcher for Pause/Activate — keeps Shopify embedded auth context ──
+  const toggleFetcher = useFetcher<{ success: boolean }>();
+  const deleteFetcher = useFetcher<{ success: boolean }>();
+  const revalidator = useRevalidator();
+
+  // After a successful toggle, revalidate the loader (stays inside the embedded session)
+  useEffect(() => {
+    if (toggleFetcher.state === "idle" && toggleFetcher.data?.success) {
+      revalidator.revalidate();
+    }
+  }, [toggleFetcher.state, toggleFetcher.data]);
+
+  // After a successful delete, navigate back to campaigns list
+  useEffect(() => {
+    if (deleteFetcher.state === "idle" && deleteFetcher.data?.success) {
+      navigate("/app/campaigns");
+    }
+  }, [deleteFetcher.state, deleteFetcher.data, navigate]);
+
+  const handleToggle = () => {
+    const fd = new FormData();
+    fd.append("action", "toggle_status");
+    fd.append("campaignId", campaign.id);
+    // Post to the campaigns list page action via Remix's fetcher (preserves auth)
+    toggleFetcher.submit(fd, { method: "post", action: "/app/campaigns" });
+  };
+
+  const handleDelete = () => {
+    if (!confirm("Delete this campaign from both the app and Shopify store?")) return;
+    const fd = new FormData();
+    fd.append("action", "delete");
+    fd.append("campaignId", campaign.id);
+    deleteFetcher.submit(fd, { method: "post", action: "/app/campaigns" });
+  };
 
   const getStatusBadge = (s: string) => {
     const map: Record<string, any> = {
@@ -1544,32 +1519,26 @@ export default function CampaignDetail() {
     return String(discountValue || "—");
   };
 
+  const isToggling = toggleFetcher.state !== "idle";
+  const isDeleting = deleteFetcher.state !== "idle";
+
   return (
     <Page
       backAction={{ content: "Campaigns", url: "/app/campaigns" }}
       title={campaign.name}
       titleMetadata={getStatusBadge(campaign.status)}
       primaryAction={{
-        content: campaign.status === "active" ? "Pause" : "Activate",
-        onAction: () => {
-          const fd = new FormData();
-          fd.append("action", "toggle_status");
-          fd.append("campaignId", campaign.id);
-          fetch("/app/campaigns", { method: "POST", body: fd })
-            .then(() => window.location.reload());
-        },
+        content: isToggling
+          ? (campaign.status === "active" ? "Pausing…" : "Activating…")
+          : (campaign.status === "active" ? "Pause" : "Activate"),
+        loading: isToggling,
+        onAction: handleToggle,
       }}
       secondaryActions={[{
-        content: "Delete", destructive: true,
-        onAction: () => {
-          if (confirm("Delete this campaign from both the app and Shopify store?")) {
-            const fd = new FormData();
-            fd.append("action", "delete");
-            fd.append("campaignId", campaign.id);
-            fetch("/app/campaigns", { method: "POST", body: fd })
-              .then(() => navigate("/app/campaigns"));
-          }
-        },
+        content: isDeleting ? "Deleting…" : "Delete",
+        destructive: true,
+        loading: isDeleting,
+        onAction: handleDelete,
       }]}
     >
       <BlockStack gap="400">
@@ -1606,12 +1575,10 @@ export default function CampaignDetail() {
                 <Text as="span" variant="bodyMd">
                   {campaign.appliesTo === "specific_products" && productEntries.length > 0
                     ? `${productEntries.length} specific product(s)`
-                    : campaign.appliesTo === "specific_products"
-                    ? "Specific products"
+                    : campaign.appliesTo === "specific_products" ? "Specific products"
                     : campaign.appliesTo === "specific_collections" && collectionNames.length > 0
                     ? `${collectionNames.length} specific collection(s)`
-                    : campaign.appliesTo === "specific_collections"
-                    ? "Specific collections"
+                    : campaign.appliesTo === "specific_collections" ? "Specific collections"
                     : "All products"}
                 </Text>
               </BlockStack>
@@ -1675,42 +1642,31 @@ export default function CampaignDetail() {
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">
-              {campaign.appliesTo === "specific_products"
-                ? "Selected Products & Variants"
-                : campaign.appliesTo === "specific_collections"
-                ? "Selected Collections"
+              {campaign.appliesTo === "specific_products" ? "Selected Products & Variants"
+                : campaign.appliesTo === "specific_collections" ? "Selected Collections"
                 : "Products"}
             </Text>
             <Divider />
 
             {(campaign.appliesTo === "all" || !campaign.appliesTo) && (
-              <Banner tone="info">
-                <p>This discount applies to <strong>all products</strong> in your store.</p>
-              </Banner>
+              <Banner tone="info"><p>This discount applies to <strong>all products</strong> in your store.</p></Banner>
             )}
 
-            {/* Specific products — but no product details available even from Shopify */}
             {campaign.appliesTo === "specific_products" && displayProducts.length === 0 && (
               <Banner tone="warning">
-                <p>
-                  This discount applies to <strong>specific products</strong>, but product details
-                  could not be loaded. The selected products may have been deleted from your store.
-                </p>
+                <p>This discount applies to <strong>specific products</strong>, but product details could not be loaded.</p>
               </Banner>
             )}
 
-            {/* Products with variant breakdown */}
             {campaign.appliesTo === "specific_products" && displayProducts.length > 0 && (
               <BlockStack gap="300">
                 {displayProducts.map((product: any) => (
                   <Box key={product.id} background="bg-surface-secondary" borderRadius="200" padding="400">
                     <BlockStack gap="300">
-                      {/* Product header */}
                       <InlineStack gap="300" blockAlign="center">
                         {product.image
                           ? <Thumbnail source={product.image} alt={product.title} size="small" />
-                          : <Box width="40px" minHeight="40px" background="bg-surface" borderRadius="100" />
-                        }
+                          : <Box width="40px" minHeight="40px" background="bg-surface" borderRadius="100" />}
                         <BlockStack gap="0">
                           <Text as="p" variant="bodyMd" fontWeight="bold">{product.title}</Text>
                           <Text as="p" variant="bodySm" tone="subdued">
@@ -1724,10 +1680,8 @@ export default function CampaignDetail() {
                         </Badge>
                       </InlineStack>
 
-                      {/* Variant list */}
                       {product.selectedVariants === "all" ? (
                         (product.variants || []).length > 0 ? (
-                          /* Show all variants when available */
                           <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "12px" }}>
                             <Text as="p" variant="bodySm" tone="subdued" fontWeight="semibold">All variants included:</Text>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "8px" }}>
@@ -1749,7 +1703,6 @@ export default function CampaignDetail() {
                           </div>
                         )
                       ) : (
-                        /* Show only selected variants */
                         Array.isArray(product.selectedVariants) && product.selectedVariants.length > 0 ? (
                           <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "12px" }}>
                             <Text as="p" variant="bodySm" tone="subdued" fontWeight="semibold">Selected variants only:</Text>
@@ -1775,7 +1728,6 @@ export default function CampaignDetail() {
               </BlockStack>
             )}
 
-            {/* Collections */}
             {campaign.appliesTo === "specific_collections" && collectionNames.length > 0 && (
               <BlockStack gap="200">
                 {collectionNames.map((name, idx) => (
