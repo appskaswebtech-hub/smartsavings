@@ -765,6 +765,22 @@ function buildCombinesWithForShipping(campaign: CampaignData) {
   };
 }
 
+// Tiered campaigns (quantity_discount, cart_goal) create one automatic
+// discount per tier. Shopify combines same-class (PRODUCT) automatic
+// discounts whenever both sides allow it, so leaving productDiscounts on
+// here would let every tier the cart qualifies for stack at once instead of
+// just the best one. Force it off so sibling tiers stay mutually exclusive —
+// Shopify then auto-applies whichever eligible tier benefits the customer
+// most. Order/shipping combination still follows the merchant's checkboxes
+// since those are a different discount class and don't cause tier stacking.
+function buildCombinesWithForTiers(campaign: CampaignData) {
+  return {
+    productDiscounts: false,
+    orderDiscounts: campaign.combineWithOrders ?? true,
+    shippingDiscounts: campaign.combineWithShipping ?? true,
+  };
+}
+
 async function findFreeShippingFunctionId(admin: AdminApiContext): Promise<string | null> {
   // ── 1. Env var (fastest — set once, never query again) ──────────────
   const envId = process.env.SHOPIFY_FREE_SHIPPING_FUNCTION_ID;
@@ -1123,7 +1139,7 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
                 startsAt, endsAt,
                 minimumRequirement: { quantity: { greaterThanOrEqualToQuantity: String(tier.quantity) } },
                 customerGets: { value, items },
-                combinesWith: buildCombinesWith(campaign),
+                combinesWith: buildCombinesWithForTiers(campaign),
               },
             }
           );
@@ -1175,7 +1191,7 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
                 startsAt, endsAt,
                 minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: String(tier.amount) } },
                 customerGets: { value, items: { all: true } },
-                combinesWith: buildCombinesWith(campaign),
+                combinesWith: buildCombinesWithForTiers(campaign),
               },
             }
           );

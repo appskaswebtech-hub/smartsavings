@@ -65,13 +65,23 @@
     <div id="sd-hint-{{ block.id }}" style="display:none;padding:8px 16px;border-top:1px solid rgba(0,0,0,0.06);background:#fffbeb;font-size:12px;color:#92400e;text-align:center;"></div>
   </div>
 </div>
+
 <div id="sd-dprice-{{ block.id }}" style="display:none;margin:8px 0;"></div>
 
 <style>
-  .sd-tier-active{background:rgba(16,185,129,0.1)!important;border-left:3px solid #10B981!important;font-weight:bold!important;}
-  cart-drawer [id^="sd-table-"],.cart-drawer [id^="sd-table-"],#cart-drawer [id^="sd-table-"],
-  cart-drawer [id^="sd-dprice-"],.cart-drawer [id^="sd-dprice-"],#cart-drawer [id^="sd-dprice-"]{display:none!important;}
-  #sd-coupon-input-{{ block.id }}:focus { border-color: {{ block.settings.savings_color }}; box-shadow: 0 0 0 2px rgba(16,185,129,0.15); }
+  .sd-tier-active{
+    background:rgba(16,185,129,0.1)!important;
+    border-left:3px solid #10B981!important;
+    font-weight:bold!important;
+  }
+  cart-drawer [id^="sd-table-"], .cart-drawer [id^="sd-table-"], #cart-drawer [id^="sd-table-"],
+  cart-drawer [id^="sd-dprice-"], .cart-drawer [id^="sd-dprice-"], #cart-drawer [id^="sd-dprice-"]{
+    display:none!important;
+  }
+  #sd-coupon-input-{{ block.id }}:focus {
+    border-color: {{ block.settings.savings_color }};
+    box-shadow: 0 0 0 2px rgba(16,185,129,0.15);
+  }
 </style>
 
 <script>
@@ -79,6 +89,7 @@ document.addEventListener('DOMContentLoaded', function() {
   var B = '{{ block.id }}';
   var box = document.getElementById('sd-table-' + B);
   if (!box) return;
+
   var priceCents = parseInt(box.dataset.price) || 0;
   var P = priceCents / 100;
   var S = box.dataset.sym || '$';
@@ -86,28 +97,56 @@ document.addEventListener('DOMContentLoaded', function() {
   var collectionIds = (box.dataset.collections || '').split(',').filter(Boolean);
   var savingsColor = '{{ block.settings.savings_color }}';
   var tableTextColor = '{{ block.settings.table_text_color }}';
+
   var tiersContainer = document.getElementById('sd-tiers-' + B);
   var tableContent = document.getElementById('sd-table-content-' + B);
   var calcEl = document.getElementById('sd-calc-' + B);
   var hintEl = document.getElementById('sd-hint-' + B);
   var dpriceEl = document.getElementById('sd-dprice-' + B);
-  var realPrice = document.querySelector('.price__container') || document.querySelector('.price') || document.querySelector('.product__price') || document.querySelector('[data-product-price]');
-  // Store original price HTML to restore later
+
+  var realPrice = document.querySelector('.price__container')
+    || document.querySelector('.price')
+    || document.querySelector('.product__price')
+    || document.querySelector('[data-product-price]');
+
   var originalPriceHTML = realPrice ? realPrice.innerHTML : '';
   if (realPrice && dpriceEl) realPrice.parentNode.insertBefore(dpriceEl, realPrice.nextSibling);
+
   var T = [];
   var lastQ = -1;
   var mode = box.dataset.mode || 'auto';
+
   // Shopify only applies a fixed-amount discount "to each item" when the
   // discount targets specific products/collections. When it targets all
-  // products, the amount is a flat amount spread across the order instead —
-  // not multiplied by quantity. This flag is set from the matched campaign's
-  // appliesTo before tiers are rendered.
+  // products, the amount is a flat amount spread across the order instead.
   var isPerItemDiscount = true;
 
-  function showTable() { box.style.display = 'block'; }
-  function hideTable() { box.style.display = 'none'; if (dpriceEl) dpriceEl.style.display = 'none'; }
-  function showTiers() { if (tableContent) tableContent.style.display = 'block'; }
+  var lastCampaignFingerprint = '';
+  var refreshTimer = null;
+
+  function showTable() {
+    box.style.display = 'block';
+  }
+
+  function restorePrice() {
+    if (realPrice) {
+      realPrice.innerHTML = originalPriceHTML;
+    }
+    if (dpriceEl) {
+      dpriceEl.style.display = 'none';
+      dpriceEl.innerHTML = '';
+    }
+  }
+
+  function hideTable() {
+    box.style.display = 'none';
+    if (dpriceEl) dpriceEl.style.display = 'none';
+    restorePrice();
+  }
+
+  function showTiers() {
+    if (tableContent) tableContent.style.display = 'block';
+  }
 
   function tierLabel(t) {
     if (t.type === 'fixed_amount') {
@@ -120,11 +159,14 @@ document.addEventListener('DOMContentLoaded', function() {
   function renderTiers(tiers) {
     T = tiers.sort(function(a,b){ return a.q - b.q; });
     var html = '';
+
     T.forEach(function(t) {
       html += '<div class="sd-r" data-q="'+t.q+'" data-d="'+t.d+'" data-type="'+t.type+'" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;font-size:13px;color:'+tableTextColor+';border-top:1px solid rgba(0,0,0,0.06);transition:all 0.2s;"><span>'+t.q+'+</span><span style="color:'+savingsColor+';font-weight:600;">'+tierLabel(t)+'</span></div>';
     });
+
     tiersContainer.innerHTML = html;
     T.forEach(function(t, i) { t.el = tiersContainer.children[i]; });
+
     showTable();
     showTiers();
     lastQ = -1;
@@ -142,7 +184,10 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function fetchAndMatch(campaignName) {
-    return fetch('/apps/smartdiscounts?shop=' + encodeURIComponent(box.dataset.shop || ''))
+    return fetch(
+      '/apps/smartdiscounts?shop=' + encodeURIComponent(box.dataset.shop || '') + '&_=' + Date.now(),
+      { cache: 'no-store', credentials: 'same-origin' }
+    )
       .then(function(r) { return r.json(); })
       .then(function(data) {
         var campaigns = data.campaigns || [];
@@ -153,47 +198,95 @@ document.addEventListener('DOMContentLoaded', function() {
 
           // If coupon mode, match by campaign name
           if (campaignName) {
-            if (c.name.toLowerCase() !== campaignName.toLowerCase()) continue;
+            if (!c.name || c.name.toLowerCase() !== campaignName.toLowerCase()) continue;
           } else {
-            // Auto mode - only quantity_discount
+            // Auto mode - only quantity_discount and active
             if (c.type !== 'quantity_discount' || c.status !== 'active') continue;
           }
 
           // Check product targeting
           var applies = false;
-          if (c.appliesTo === 'all' || !c.appliesTo) { applies = true; }
-          else if (c.appliesTo === 'specific_products' && c.productIds) {
-            for (var j = 0; j < c.productIds.length; j++) { if (String(c.productIds[j]) === String(productId)) { applies = true; break; } }
+          if (c.appliesTo === 'all' || !c.appliesTo) {
+            applies = true;
+          } else if (c.appliesTo === 'specific_products' && c.productIds) {
+            for (var j = 0; j < c.productIds.length; j++) {
+              if (String(c.productIds[j]) === String(productId)) { applies = true; break; }
+            }
           } else if (c.appliesTo === 'specific_collections' && c.collectionIds) {
-            for (var j = 0; j < c.collectionIds.length; j++) { for (var k = 0; k < collectionIds.length; k++) { if (String(c.collectionIds[j]) === String(collectionIds[k])) { applies = true; break; } } if (applies) break; }
+            for (var j = 0; j < c.collectionIds.length; j++) {
+              for (var k = 0; k < collectionIds.length; k++) {
+                if (String(c.collectionIds[j]) === String(collectionIds[k])) { applies = true; break; }
+              }
+              if (applies) break;
+            }
           }
-          if (applies) { matched = c; break; }
+
+          if (applies) {
+            matched = c;
+            break;
+          }
         }
 
         return matched;
       });
   }
 
+  function syncCampaign() {
+    return fetchAndMatch(null)
+      .then(function(matched) {
+        if (!matched || !matched.tiers || matched.tiers.length === 0) {
+          lastCampaignFingerprint = '';
+          hideTable();
+          return;
+        }
+
+        var newFingerprint = JSON.stringify({
+          name: matched.name || '',
+          status: matched.status || '',
+          appliesTo: matched.appliesTo || '',
+          productIds: matched.productIds || [],
+          collectionIds: matched.collectionIds || [],
+          tiers: matched.tiers || []
+        });
+
+        // Only re-render when something actually changed.
+        if (newFingerprint === lastCampaignFingerprint) return;
+        lastCampaignFingerprint = newFingerprint;
+
+        var tiers = mapTiers(matched.tiers);
+        if (tiers.length === 0) {
+          hideTable();
+          return;
+        }
+
+        isPerItemDiscount =
+          (matched.appliesTo === 'specific_products' || matched.appliesTo === 'specific_collections');
+
+        renderTiers(tiers);
+      })
+      .catch(function() {
+        hideTable();
+      });
+  }
+
   // ─── AUTO MODE ───
   if (mode === 'auto') {
-    fetchAndMatch(null)
-      .then(function(matched) {
-        if (matched && matched.tiers && matched.tiers.length > 0) {
-          var tiers = mapTiers(matched.tiers);
-          if (tiers.length > 0) {
-            isPerItemDiscount = (matched.appliesTo === 'specific_products' || matched.appliesTo === 'specific_collections');
-            renderTiers(tiers);
-            return;
-          }
-        }
-        hideTable();
-      })
-      .catch(function() { hideTable(); });
+    syncCampaign();
+    refreshTimer = setInterval(syncCampaign, 5000);
+
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden) syncCampaign();
+    });
+
+    window.addEventListener('pageshow', function() {
+      syncCampaign();
+    });
   }
 
   // ─── COUPON MODE ───
   if (mode === 'coupon') {
     showTable();
+
     var toggle = document.getElementById('sd-coupon-toggle-' + B);
     var form = document.getElementById('sd-coupon-form-' + B);
     var input = document.getElementById('sd-coupon-input-' + B);
@@ -232,14 +325,20 @@ document.addEventListener('DOMContentLoaded', function() {
             var tiers = mapTiers(matched.tiers);
 
             if (tiers.length > 0) {
-              // Hide coupon section, show tiers
-              couponSection.innerHTML = '<div style="padding:10px 16px;background:#f0fdf4;display:flex;justify-content:space-between;align-items:center;"><span style="color:#10b981;font-weight:700;font-size:13px;">✅ Coupon "' + code.toUpperCase() + '" applied!</span><button onclick="location.reload()" style="background:none;border:none;color:#999;font-size:12px;cursor:pointer;text-decoration:underline;">Remove</button></div>';
-              isPerItemDiscount = (matched.appliesTo === 'specific_products' || matched.appliesTo === 'specific_collections');
+              couponSection.innerHTML =
+                '<div style="padding:10px 16px;background:#f0fdf4;display:flex;justify-content:space-between;align-items:center;">' +
+                  '<span style="color:#10b981;font-weight:700;font-size:13px;">✅ Coupon "' + code.toUpperCase() + '" applied!</span>' +
+                  '<button type="button" onclick="location.reload()" style="background:none;border:none;color:#999;font-size:12px;cursor:pointer;text-decoration:underline;">Remove</button>' +
+                '</div>';
+
+              isPerItemDiscount =
+                (matched.appliesTo === 'specific_products' || matched.appliesTo === 'specific_collections');
+
               renderTiers(tiers);
               return;
             }
           }
-          // Not found
+
           errorEl.textContent = 'Invalid coupon code. Please check and try again.';
           errorEl.style.display = 'block';
           applyBtn.textContent = '{{ block.settings.coupon_btn_label }}';
@@ -253,23 +352,47 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Allow Enter key
     if (input) input.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') { e.preventDefault(); applyBtn.click(); }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyBtn.click();
+      }
     });
   }
 
   function go() {
     if (T.length === 0) return;
-    var inp = document.querySelector('input[name="quantity"]') || document.querySelector('.quantity__input') || document.querySelector('quantity-input input') || document.querySelector('.product-form input[type="number"]');
+
+    var inp =
+      document.querySelector('input[name="quantity"]') ||
+      document.querySelector('.quantity__input') ||
+      document.querySelector('quantity-input input') ||
+      document.querySelector('.product-form input[type="number"]');
+
     var q = inp ? (parseInt(inp.value) || 1) : 1;
     if (q === lastQ) return;
     lastQ = q;
+
     var act = null, nxt = null;
-    for (var i = T.length-1; i >= 0; i--) { if (q >= T[i].q) { act = T[i]; break; } }
-    for (var i = 0; i < T.length; i++) { if (q < T[i].q) { nxt = T[i]; break; } }
-    T.forEach(function(t) { if (t.el) { t.el.classList.remove('sd-tier-active'); t.el.style.background=''; t.el.style.borderLeft=''; t.el.style.fontWeight=''; } });
+
+    for (var i = T.length - 1; i >= 0; i--) {
+      if (q >= T[i].q) { act = T[i]; break; }
+    }
+    for (var i = 0; i < T.length; i++) {
+      if (q < T[i].q) { nxt = T[i]; break; }
+    }
+
+    T.forEach(function(t) {
+      if (t.el) {
+        t.el.classList.remove('sd-tier-active');
+        t.el.style.background = '';
+        t.el.style.borderLeft = '';
+        t.el.style.fontWeight = '';
+      }
+    });
+
     if (act && act.el) act.el.classList.add('sd-tier-active');
+
     var dp = P, ts = 0;
     if (act) {
       if (act.type === 'fixed_amount') {
@@ -286,45 +409,62 @@ document.addEventListener('DOMContentLoaded', function() {
         ts = (P - dp) * q;
       }
     }
+
     if (act && calcEl) {
       var perItemLabel = (act.type === 'fixed_amount' && !isPerItemDiscount) ? 'Avg. price per item:' : 'Price per item:';
-      calcEl.style.display='block';
-      calcEl.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:13px;">'+perItemLabel+'</span><span><s style="color:#999;font-size:12px;margin-right:6px;">'+S+P.toFixed(2)+'</s><b style="color:'+savingsColor+';font-size:15px;">'+S+dp.toFixed(2)+'</b></span></div><div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:13px;">Total savings:</span><b style="color:'+savingsColor+';font-size:14px;">-'+S+ts.toFixed(2)+' ('+tierLabel(act)+')</b></div>';
-    } else if (calcEl) calcEl.style.display='none';
-    if (hintEl) {
-      if (!act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more to unlock '+tierLabel(nxt)+'!'; }
-      else if (act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more for '+tierLabel(nxt)+' (saving '+tierLabel(act)+' now)'; }
-      else hintEl.style.display='none';
+      calcEl.style.display = 'block';
+      calcEl.innerHTML =
+        '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:13px;">'+perItemLabel+'</span><span><s style="color:#999;font-size:12px;margin-right:6px;">'+S+P.toFixed(2)+'</s><b style="color:'+savingsColor+';font-size:15px;">'+S+dp.toFixed(2)+'</b></span></div>' +
+        '<div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:13px;">Total savings:</span><b style="color:'+savingsColor+';font-size:14px;">-'+S+ts.toFixed(2)+' ('+tierLabel(act)+')</b></div>';
+    } else if (calcEl) {
+      calcEl.style.display = 'none';
     }
+
+    if (hintEl) {
+      if (!act && nxt) {
+        hintEl.style.display = 'block';
+        hintEl.textContent = '💡 Add ' + (nxt.q - q) + ' more to unlock ' + tierLabel(nxt) + '!';
+      } else if (act && nxt) {
+        hintEl.style.display = 'block';
+        hintEl.textContent = '💡 Add ' + (nxt.q - q) + ' more for ' + tierLabel(nxt) + ' (saving ' + tierLabel(act) + ' now)';
+      } else {
+        hintEl.style.display = 'none';
+      }
+    }
+
     if (realPrice) {
       if (act) {
-        // Replace the price container content with strikethrough + discounted price
         realPrice.innerHTML =
           '<div class="sd-price-replaced" style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">' +
             '<s style="color:#999;font-size:0.85em;font-weight:400;text-decoration:line-through;">' + S + P.toFixed(2) + '</s>' +
             '<span style="font-size:1em;font-weight:700;color:inherit;">' + S + dp.toFixed(2) + '</span>' +
           '</div>';
-        // Hide the separate overlay
+
         if (dpriceEl) {
           var badgeText = act.type === 'fixed_amount'
             ? (S + act.d + (isPerItemDiscount ? ' OFF EACH' : ' OFF ORDER'))
             : (act.d + '% OFF');
+
           var savingsContext = (act.type === 'fixed_amount' && !isPerItemDiscount)
             ? 'on your order'
             : ('on ' + q + ' item' + (q > 1 ? 's' : ''));
+
           dpriceEl.style.display = 'block';
           dpriceEl.innerHTML =
             '<div style="font-size:0.85em;color:' + savingsColor + ';font-weight:600;margin-top:2px;">You save ' + S + ts.toFixed(2) + ' ' + savingsContext +
             ' <span style="background:' + savingsColor + ';color:#fff;padding:2px 8px;border-radius:4px;font-size:0.8em;font-weight:700;margin-left:4px;">SAVE ' + badgeText + '</span></div>';
         }
       } else {
-        // Restore original price
-        realPrice.innerHTML = originalPriceHTML;
-        if (dpriceEl) dpriceEl.style.display = 'none';
+        restorePrice();
       }
     }
   }
+
   setInterval(go, 200);
+
+  window.addEventListener('beforeunload', function() {
+    if (refreshTimer) clearInterval(refreshTimer);
+  });
 });
 </script>
 {% endif %}
