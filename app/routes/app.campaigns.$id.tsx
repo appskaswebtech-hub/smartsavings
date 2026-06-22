@@ -1474,12 +1474,13 @@ export default function CampaignDetail() {
     }
   }, [toggleFetcher.state, toggleFetcher.data]);
 
-  // After a successful delete, navigate back to campaigns list
+  // After delete action completes, navigate away during the "loading" phase
+  // (before Remix revalidates the current loader, which would 404 on the deleted campaign)
   useEffect(() => {
-    if (deleteFetcher.state === "idle" && deleteFetcher.data?.success) {
+    if (deleteFetcher.state === "loading") {
       navigate("/app/campaigns");
     }
-  }, [deleteFetcher.state, deleteFetcher.data, navigate]);
+  }, [deleteFetcher.state, navigate]);
 
   const handleToggle = () => {
     const fd = new FormData();
