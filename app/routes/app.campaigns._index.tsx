@@ -3842,9 +3842,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let syncMessage = "";
 
   try {
-    const shopifyRes = await admin.graphql(`
-      query {
-        discountNodes(first: 100) {
+    const discountNodesQuery = `
+      query($after: String) {
+        discountNodes(first: 100, after: $after) {
+          pageInfo { hasNextPage endCursor }
           nodes {
             id
             discount {
@@ -3938,10 +3939,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           }
         }
       }
-    `);
+      `;
 
-    const shopifyResult = await shopifyRes.json();
-    const shopifyDiscounts = shopifyResult.data?.discountNodes?.nodes || [];
+    const shopifyDiscounts: any[] = [];
+    let afterCursor: string | null = null;
+    let hasNextPage = true;
+    let pageGuard = 0;
+
+    while (hasNextPage && pageGuard < 20) {
+      pageGuard++;
+      const shopifyRes: any = await admin.graphql(discountNodesQuery, { variables: { after: afterCursor } });
+      const shopifyResult: any = await shopifyRes.json();
+      const page: any = shopifyResult.data?.discountNodes;
+      shopifyDiscounts.push(...(page?.nodes || []));
+      hasNextPage = !!page?.pageInfo?.hasNextPage;
+      afterCursor = page?.pageInfo?.endCursor || null;
+    }
 
     const shopifyIdToStatus = new Map<string, string>();
     const shopifyTitles = new Set<string>();
@@ -4049,7 +4062,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       orderBy: { createdAt: "desc" },
     });
 
-    const toDelete: string[] = [];
+    // Only sync status (active/expired/scheduled) when a live match is found.
+    // Deliberately never delete a local campaign here just because no match
+    // was found — a missed match can be a transient false negative (the
+    // 100-item page cap above, a read-after-write consistency lag right after
+    // creation, a flaky GraphQL call) and deleting on that basis has caused
+    // real data loss: Shopify discounts left live with no local record to
+    // manage them. Reactive cleanup for genuinely-deleted discounts is handled
+    // by app/routes/webhooks.discounts.delete.tsx instead.
     const toUpdate: { id: string; status: string }[] = [];
 
     for (const campaign of campaigns) {
@@ -4070,9 +4090,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         if (hasOnShopify) shopifyStatus = shopifyStatusMap.get(campaign.name);
       }
 
-      if (!hasOnShopify) {
-        toDelete.push(campaign.id);
-      } else if (shopifyStatus) {
+      if (hasOnShopify && shopifyStatus) {
         const mapped =
           shopifyStatus === "ACTIVE"
             ? "active"
@@ -4085,12 +4103,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     }
 
-    if (toDelete.length > 0) {
-      await db.campaign.deleteMany({ where: { id: { in: toDelete } } });
-      const delMsg = `${toDelete.length} campaign(s) removed (deleted from store)`;
-      syncMessage = syncMessage ? `${syncMessage}. ${delMsg}` : delMsg;
-    }
-
     for (const u of toUpdate) {
       await db.campaign.update({
         where: { id: u.id },
@@ -4098,10 +4110,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       });
     }
 
-    campaigns = await db.campaign.findMany({
-      where: { shop },
-      orderBy: { createdAt: "desc" },
-    });
+    if (toUpdate.length > 0) {
+      campaigns = await db.campaign.findMany({
+        where: { shop },
+        orderBy: { createdAt: "desc" },
+      });
+    }
   } catch (error) {
     console.error("Sync error:", error);
   }

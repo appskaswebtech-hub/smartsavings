@@ -1053,6 +1053,63 @@ export async function deleteMatchingDiscounts(admin: AdminApiContext, campaignNa
   }
 }
 
+/**
+ * Delete specific Shopify discounts by their node IDs. Used as a rollback
+ * when discounts were just created on Shopify but the local DB write that
+ * was supposed to back them failed — without this, those discounts would be
+ * left live with nothing in the app tracking them. Also used by the edit
+ * action to remove the discount(s) an edit is replacing.
+ *
+ * Returns a list of human-readable errors instead of swallowing them — a
+ * silently-failed deletion (whether a thrown exception or a GraphQL-level
+ * userError) previously looked identical to a successful one to the caller,
+ * which made stale discounts that failed to delete invisible and impossible
+ * to diagnose. Callers should surface any returned errors to the user.
+ */
+export async function deleteShopifyDiscountsByIds(admin: AdminApiContext, ids: (string | undefined)[]): Promise<string[]> {
+  const errors: string[] = [];
+  for (const id of ids) {
+    if (!id) continue;
+    try {
+      if (id.includes("DiscountCodeNode")) {
+        const result = await runMutation(admin,
+          `#graphql
+          mutation del($id: ID!) {
+            discountCodeDelete(id: $id) {
+              deletedCodeDiscountId
+              userErrors { field message }
+            }
+          }`,
+          { id }
+        );
+        const ue = result?.data?.discountCodeDelete?.userErrors || [];
+        if (ue.length) {
+          errors.push(`Delete ${id}: ${ue.map((e: any) => e.message).join(", ")}`);
+        }
+      } else {
+        const result = await runMutation(admin,
+          `#graphql
+          mutation del($id: ID!) {
+            discountAutomaticDelete(id: $id) {
+              deletedAutomaticDiscountId
+              userErrors { field message }
+            }
+          }`,
+          { id }
+        );
+        const ue = result?.data?.discountAutomaticDelete?.userErrors || [];
+        if (ue.length) {
+          errors.push(`Delete ${id}: ${ue.map((e: any) => e.message).join(", ")}`);
+        }
+      }
+    } catch (e) {
+      console.error(`[SmartSavings] deleteShopifyDiscountsByIds failed for ${id}:`, e);
+      errors.push(`Delete ${id}: ${String(e)}`);
+    }
+  }
+  return errors;
+}
+
 export async function createShopifyDiscount(admin: AdminApiContext, campaign: CampaignData) {
   const startsAt = campaign.startDate.toISOString();
   const endsAt = campaign.endDate ? campaign.endDate.toISOString() : null;
@@ -1093,10 +1150,17 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
         .filter((t: any) => !isNaN(t.quantity) && !isNaN(t.discount) && t.discount > 0 && t.quantity > 0)
         .sort((a: any, b: any) => a.quantity - b.quantity);
 
+      // ── Guard: an empty tier list would otherwise report success while creating
+      // nothing on Shopify, leaving the campaign orphaned (and later auto-deleted
+      // by the campaigns list sync since it has no matching live discount) ──
+      if (tiers.length === 0) {
+        errors.push("Add at least one tier with a minimum quantity and a discount greater than 0 before saving.");
+      }
+
       // ── Guard: duplicate quantities mean multiple discounts fire for the same qty ──
       const quantities = tiers.map((t: any) => t.quantity);
       const uniqueQtys = new Set(quantities);
-      if (uniqueQtys.size !== quantities.length) {
+      if (tiers.length > 0 && uniqueQtys.size !== quantities.length) {
         const dupes = quantities.filter((q: number, i: number) => quantities.indexOf(q) !== i);
         errors.push(`Tiers cannot share the same minimum quantity. Duplicate quantity found: ${[...new Set<number>(dupes)].map(q => `Buy ${q}+`).join(", ")}. Each tier must have a unique quantity threshold.`);
       }
@@ -1114,7 +1178,9 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
         }
       }
 
-      if (uniqueQtys.size !== quantities.length) {
+      if (tiers.length === 0) {
+        // error already pushed above — don't proceed to create any Shopify discounts
+      } else if (uniqueQtys.size !== quantities.length) {
         // error already pushed above — don't proceed to create any Shopify discounts
       } else if (tierValidationError) {
         errors.push(tierValidationError);
@@ -1161,10 +1227,19 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
         .filter((t: any) => !isNaN(t.amount) && !isNaN(t.discount) && t.discount > 0 && t.amount >= 0)
         .sort((a: any, b: any) => a.amount - b.amount);
 
+      // ── Guard: an empty tier list would otherwise report success while creating
+      // nothing on Shopify, leaving the campaign orphaned (and later auto-deleted
+      // by the campaigns list sync since it has no matching live discount) ──
+      if (tiers.length === 0) {
+        errors.push("Add at least one cart goal tier with a minimum spend amount and a discount greater than 0 before saving.");
+      }
+
       // ── Guard: duplicate spend amounts ──
       const amounts = tiers.map((t: any) => t.amount);
       const uniqueAmounts = new Set(amounts);
-      if (uniqueAmounts.size !== amounts.length) {
+      if (tiers.length === 0) {
+        // error already pushed above — don't proceed to create any Shopify discounts
+      } else if (uniqueAmounts.size !== amounts.length) {
         const dupes = amounts.filter((a: number, i: number) => amounts.indexOf(a) !== i);
         errors.push(`Cart goal tiers cannot share the same minimum spend amount. Duplicate amount found: ${[...new Set<number>(dupes)].map(a => `$${a}+`).join(", ")}.`);
       } else {
@@ -1399,6 +1474,9 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
 
   } catch (error) {
     console.error("createShopifyDiscount error:", error);
-    return { success: false, errors: [String(error)], createdIds: [] };
+    // Preserve createdIds so the caller can roll back any discounts that
+    // succeeded before the exception (e.g. tier 1-2 created, tier 3 threw) —
+    // discarding them here would orphan live Shopify discounts permanently.
+    return { success: false, errors: [String(error)], createdIds };
   }
 }

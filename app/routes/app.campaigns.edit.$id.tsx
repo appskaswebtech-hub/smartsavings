@@ -2606,7 +2606,7 @@ import { useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { createShopifyDiscount } from "../discount.server";
+import { createShopifyDiscount, deleteShopifyDiscountsByIds } from "../discount.server";
 import type { AdminApiContext } from "@shopify/shopify-app-remix/server";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
@@ -2618,100 +2618,56 @@ const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   shipping_discount: "Shipping discount",
 };
 
-async function deleteMatchingDiscounts(
+// Finds the IDs of Shopify discounts currently matching a campaign name —
+// does NOT delete anything. Must be called BEFORE creating any replacement
+// discount with the same name: querying by title-prefix AFTER creation would
+// also match the brand-new discounts (same name prefix), causing them to be
+// deleted along with the old ones. Callers should snapshot these IDs first,
+// then delete them explicitly by ID once the replacements are confirmed live.
+// Does NOT catch its own errors — a failed lookup here must not be confused
+// with "no matching discounts exist." Swallowing it previously made the
+// caller skip deletion silently with no indication anything went wrong;
+// callers should catch this themselves and surface the failure to the user.
+async function findMatchingDiscountIds(
   admin: AdminApiContext,
   campaignName: string
 ): Promise<string[]> {
-  const errors: string[] = [];
-
-  try {
-    const res = await admin.graphql(
-      `#graphql
-      query {
-        discountNodes(first: 250) {
-          nodes {
-            id
-            discount {
-              __typename
-              ... on DiscountAutomaticBasic { title }
-              ... on DiscountAutomaticApp { title }
-              ... on DiscountAutomaticBxgy { title }
-              ... on DiscountAutomaticFreeShipping { title }
-              ... on DiscountCodeBasic { title }
-              ... on DiscountCodeFreeShipping { title }
-            }
+  const res = await admin.graphql(
+    `#graphql
+    query {
+      discountNodes(first: 250) {
+        nodes {
+          id
+          discount {
+            __typename
+            ... on DiscountAutomaticBasic { title }
+            ... on DiscountAutomaticApp { title }
+            ... on DiscountAutomaticBxgy { title }
+            ... on DiscountAutomaticFreeShipping { title }
+            ... on DiscountCodeBasic { title }
+            ... on DiscountCodeFreeShipping { title }
           }
         }
-      }`
-    );
+      }
+    }`
+  );
 
-    const data = await res.json();
-    const nodes = data?.data?.discountNodes?.nodes || [];
+  const data: any = await res.json();
+  if (data?.errors) {
+    throw new Error(`findMatchingDiscountIds GraphQL error for "${campaignName}": ${JSON.stringify(data.errors)}`);
+  }
+  const nodes = data?.data?.discountNodes?.nodes || [];
 
-    const matching = nodes.filter((n: any) => {
+  return nodes
+    .filter((n: any) => {
       const t = n.discount?.title || "";
       return (
         t === campaignName ||
         t.startsWith(campaignName + " (") ||
         t.startsWith(campaignName + " - ")
       );
-    });
-
-    for (const node of matching) {
-      const typename = node.discount?.__typename || "";
-      const isCode = typename.includes("Code");
-
-      try {
-        if (isCode) {
-          const delRes = await admin.graphql(
-            `#graphql
-            mutation del($id: ID!) {
-              discountCodeDelete(id: $id) {
-                deletedCodeDiscountId
-                userErrors { field message }
-              }
-            }`,
-            { variables: { id: node.id } }
-          );
-          const delJson = await delRes.json();
-          const ue = delJson?.data?.discountCodeDelete?.userErrors || [];
-          if (ue.length) {
-            errors.push(
-              `${node.discount?.title || node.id}: ${ue
-                .map((e: any) => e.message)
-                .join(", ")}`
-            );
-          }
-        } else {
-          const delRes = await admin.graphql(
-            `#graphql
-            mutation del($id: ID!) {
-              discountAutomaticDelete(id: $id) {
-                deletedAutomaticDiscountId
-                userErrors { field message }
-              }
-            }`,
-            { variables: { id: node.id } }
-          );
-          const delJson = await delRes.json();
-          const ue = delJson?.data?.discountAutomaticDelete?.userErrors || [];
-          if (ue.length) {
-            errors.push(
-              `${node.discount?.title || node.id}: ${ue
-                .map((e: any) => e.message)
-                .join(", ")}`
-            );
-          }
-        }
-      } catch (e) {
-        errors.push(`${node.discount?.title || node.id}: ${String(e)}`);
-      }
-    }
-  } catch (e) {
-    errors.push(`Delete sync error: ${String(e)}`);
-  }
-
-  return errors;
+    })
+    .map((n: any) => n.id);
 }
 
 // ── Loader ────────────────────────────────────────────────────────────────────
@@ -3017,26 +2973,70 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     // the same fully-correct creation logic for every campaign type and
     // guarantees products already in a cart pick up the edited discount the
     // next time the cart recalculates.
-    const deleteErrors = await deleteMatchingDiscounts(admin, oldName);
-    if (deleteErrors.length > 0) {
-      errors.push(...deleteErrors);
-    } else {
-      const recreateResult = await createShopifyDiscount(
-        admin,
-        updatedCampaignForShopify as any
-      );
+    // Delete the old discount(s) BEFORE creating the replacement — not after.
+    // If the campaign name/tier values are unchanged (the common case — most
+    // edits don't touch every field), the new discount's title would be
+    // byte-identical to the still-live old one, and Shopify rejects automatic
+    // discounts with duplicate titles outright. Creating before deleting
+    // therefore made every "edit without changing the discount terms" fail
+    // every time, with the old discount never removed since recreate never
+    // succeeded. Deleting first avoids that collision entirely.
+    //
+    // The risk this reintroduces — a delete webhook landing before the local
+    // row is updated, wiping the campaign out from under an in-progress edit
+    // (see webhooks.discounts.delete.tsx, which matches by exact
+    // shopifyDiscountId) — is neutralized by clearing shopifyDiscountId to
+    // null first: a null value can never match a specific id in that
+    // webhook's lookup, so the race is closed without needing to delete after
+    // creation.
+    const oldDiscountIds = await findMatchingDiscountIds(admin, oldName);
 
-      if (!recreateResult.success) {
-        errors.push(
-          ...(recreateResult.errors || []).map(
-            (e: any) => e.message || String(e)
-          )
-        );
-      } else if (recreateResult.createdIds?.[0]) {
+    if (oldDiscountIds.length > 0) {
+      try {
+        await db.campaign.update({
+          where: { id: campaignId },
+          data: { shopifyDiscountId: null },
+        });
+      } catch (e) {
+        errors.push(`Failed to clear discount ID before replacing: ${String(e)}`);
+      }
+      const oldDeleteErrors = await deleteShopifyDiscountsByIds(admin, oldDiscountIds);
+      if (oldDeleteErrors.length > 0) {
+        errors.push(...oldDeleteErrors);
+      }
+    }
+
+    const recreateResult = await createShopifyDiscount(
+      admin,
+      updatedCampaignForShopify as any
+    );
+
+    if (!recreateResult.success) {
+      // Some tiers may have been created before the failure (e.g. tier 1-2
+      // succeeded, tier 3 hit a userError) — roll those back so we don't
+      // leave a half-applied, inconsistent set of discounts live. Note: the
+      // old discounts are already gone at this point, so a recreate failure
+      // here does mean the campaign temporarily has zero live discounts —
+      // the error banner surfaces this so the merchant can retry.
+      if (recreateResult.createdIds?.length) {
+        const rollbackErrors = await deleteShopifyDiscountsByIds(admin, recreateResult.createdIds);
+        if (rollbackErrors.length > 0) {
+          errors.push(...rollbackErrors);
+        }
+      }
+      errors.push(
+        ...(recreateResult.errors || []).map(
+          (e: any) => e.message || String(e)
+        )
+      );
+    } else if (recreateResult.createdIds?.[0]) {
+      try {
         await db.campaign.update({
           where: { id: campaignId },
           data: { shopifyDiscountId: recreateResult.createdIds[0] },
         });
+      } catch (e) {
+        errors.push(`Failed to persist new discount ID: ${String(e)}`);
       }
     }
   } catch (e) {
@@ -3234,6 +3234,8 @@ export default function EditCampaign() {
     navigation.state === "submitting" || navigation.state === "loading";
 
   const handleSave = () => {
+    if (isSaving) return;
+
     if (!name.trim()) {
       shopify.toast.show("Campaign name is required.", { isError: true });
       return;

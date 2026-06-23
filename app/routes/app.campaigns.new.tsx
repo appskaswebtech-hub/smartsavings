@@ -2016,7 +2016,7 @@ import {
   type LoaderFunctionArgs,
   type ActionFunctionArgs,
 } from "@remix-run/node";
-import { useLoaderData, useNavigate, useSubmit, useActionData, useFetcher } from "@remix-run/react";
+import { useLoaderData, useNavigate, useSubmit, useActionData, useFetcher, useNavigation } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -2038,7 +2038,7 @@ import { useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { createShopifyDiscount } from "../discount.server";
+import { createShopifyDiscount, deleteShopifyDiscountsByIds } from "../discount.server";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   bulk_price: "Bulk price editor",
@@ -2140,7 +2140,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     if (!shopifyResult.success && shopifyResult.errors?.length) {
-      const errorMsg = shopifyResult.errors.map((e: any) => e.message || e).join(", ");
+      // Some tiers/discounts may have been created before the failure (e.g.
+      // tier 1-2 succeeded, tier 3 hit a userError) — roll those back since
+      // we're not going to save a local campaign to track them.
+      let errorMsg = shopifyResult.errors.map((e: any) => e.message || e).join(", ");
+      if (shopifyResult.createdIds?.length) {
+        const rollbackErrors = await deleteShopifyDiscountsByIds(admin, shopifyResult.createdIds);
+        if (rollbackErrors.length > 0) {
+          errorMsg += `; cleanup errors: ${rollbackErrors.join(", ")}`;
+        }
+      }
       return json({ success: false, error: `Shopify error: ${errorMsg}` });
     }
 
@@ -2160,30 +2169,43 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       ? null
       : minQuantityForShipping ? parseInt(minQuantityForShipping) : null;
 
-    await db.campaign.create({
-      data: {
-        shop,
-        name: name.trim(),
-        type,
-        status: status || "active",
-        discountType: finalDiscountType,
-        discountValue: Math.max(0, discountValue || 0),
-        appliesTo: appliesTo || "all",
-        startDate: campaignStartDate,
-        endDate: campaignEndDate,
-        tiers: tiers || null,
-        minimumAmount:  storedMinAmount,   // null when requirementType = "quantity"
-        minimumQuantity: storedMinQty,     // null when requirementType = "amount"
-        requirementType: requirementType || "amount",  // store so proxy/widget can use OR vs AND logic
-        geoTarget: geoTarget || null,
-        productIds: productIds || null,
-        collectionIds: collectionIds || null,
-        combineWithProducts,
-        combineWithOrders,
-        combineWithShipping,
-        shopifyDiscountId,                 // stored for reliable webhook matching
-      },
-    });
+    try {
+      await db.campaign.create({
+        data: {
+          shop,
+          name: name.trim(),
+          type,
+          status: status || "active",
+          discountType: finalDiscountType,
+          discountValue: Math.max(0, discountValue || 0),
+          appliesTo: appliesTo || "all",
+          startDate: campaignStartDate,
+          endDate: campaignEndDate,
+          tiers: tiers || null,
+          minimumAmount:  storedMinAmount,   // null when requirementType = "quantity"
+          minimumQuantity: storedMinQty,     // null when requirementType = "amount"
+          requirementType: requirementType || "amount",  // store so proxy/widget can use OR vs AND logic
+          geoTarget: geoTarget || null,
+          productIds: productIds || null,
+          collectionIds: collectionIds || null,
+          combineWithProducts,
+          combineWithOrders,
+          combineWithShipping,
+          shopifyDiscountId,                 // stored for reliable webhook matching
+        },
+      });
+    } catch (dbError: any) {
+      // The Shopify discounts already exist at this point — if we can't save
+      // the local record to track them, delete them rather than leave them
+      // live and orphaned with nothing managing them in the app.
+      const rollbackErrors = await deleteShopifyDiscountsByIds(admin, shopifyResult.createdIds || []);
+      console.error("Failed to save campaign after Shopify discount creation:", dbError);
+      let msg = dbError?.message || dbError?.toString() || "Unknown error";
+      if (rollbackErrors.length > 0) {
+        msg += `; cleanup errors: ${rollbackErrors.join(", ")}`;
+      }
+      return json({ success: false, error: `Failed to save campaign: ${msg}` });
+    }
 
     return redirect("/app/campaigns");
   } catch (error: any) {
@@ -2438,6 +2460,9 @@ export default function NewCampaign() {
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const submit = useSubmit();
+  const navigation = useNavigation();
+  const isSaving =
+    navigation.state === "submitting" || navigation.state === "loading";
 
   const [name, setName] = useState("");
   const [discountType, setDiscountType] = useState("percentage");
@@ -2590,6 +2615,8 @@ export default function NewCampaign() {
   );
 
   const handleSave = () => {
+    if (isSaving) return;
+
     if (isFreeShippingCampaign && !geoTarget) {
       shopify.toast.show("Please choose where free shipping applies (Domestic or All zones).", { isError: true });
       return;
@@ -2657,7 +2684,11 @@ export default function NewCampaign() {
     <Page
       backAction={{ content: "Choose campaign type", url: "/app/campaigns/create" }}
       title={`Create ${CAMPAIGN_TYPE_LABELS[type] || "Campaign"}`}
-      primaryAction={{ content: "Save campaign", onAction: handleSave }}
+      primaryAction={{
+        content: isSaving ? "Saving campaign..." : "Save campaign",
+        onAction: handleSave,
+        loading: isSaving,
+      }}
       secondaryActions={[{ content: "Discard", onAction: () => navigate("/app/campaigns") }]}
     >
       {actionData && !actionData.success && (
