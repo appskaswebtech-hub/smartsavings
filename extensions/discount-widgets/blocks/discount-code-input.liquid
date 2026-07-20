@@ -8,6 +8,7 @@
 {% if block.settings.enabled %}
 <div
   id="sd-code-{{ block.id }}"
+  data-sd-widget="discount_code_input"
   data-product-price="{{ product.selected_or_first_available_variant.price }}"
   data-sym="{{ cart.currency.symbol }}"
   data-shop="{{ shop.permanent_domain }}"
@@ -53,6 +54,26 @@ document.addEventListener('DOMContentLoaded', function() {
     })
     .then(function(data) {
       var campaigns = data.campaigns || [];
+
+      // Appearance/text overrides from Customization → Discount code input
+      var cs = (data && data.codeInputStyle) || null;
+      if (cs) {
+        if (cs.enabled === false) return; // global kill-switch
+        var tEl = document.getElementById('sd-code-toggle-' + B);
+        var iEl = document.getElementById('sd-code-input-' + B);
+        var aEl = document.getElementById('sd-code-apply-' + B);
+        if (cs.promptText && tEl) tEl.textContent = cs.promptText;
+        if (cs.placeholder && iEl) iEl.setAttribute('placeholder', cs.placeholder);
+        if (cs.buttonLabel && aEl) { aEl.textContent = cs.buttonLabel; btnLabel = cs.buttonLabel; }
+        if (cs.textColor && tEl) tEl.style.color = cs.textColor;
+        if (cs.borderColor) { box.style.borderColor = cs.borderColor; if (iEl) iEl.style.borderColor = cs.borderColor; }
+        if (cs.borderRadius != null) box.style.borderRadius = cs.borderRadius + 'px';
+        if (aEl) {
+          if (cs.buttonBg) aEl.style.background = cs.buttonBg;
+          if (cs.buttonText) aEl.style.color = cs.buttonText;
+        }
+      }
+
       var hasActiveCode = campaigns.some(function(c) {
         return c.type === 'advanced_discount_code' && c.status === 'active';
       });
@@ -215,6 +236,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
+<script src="{{ 'sd-widget-layout.js' | asset_url }}" defer></script>
 {% endif %}
 
 {% schema %}

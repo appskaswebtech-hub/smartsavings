@@ -1,0 +1,22 @@
+{%- comment -%} SmartDiscounts email-capture discount popup (app embed). Logic + styles live in assets. {%- endcomment -%}
+{{ 'email-discount-popup.css' | asset_url | stylesheet_tag }}
+<div id="sd-email-popup-root"
+  data-shop="{{ shop.permanent_domain }}"
+  data-template="{{ template.name }}"
+  data-delay="{{ block.settings.delay | default: 2 }}"
+  data-accent="{{ block.settings.accent_color }}"
+  data-radius="{{ block.settings.border_radius }}"
+  style="display:none;"></div>
+<script src="{{ 'email-discount-popup.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Discount Popup",
+  "target": "body",
+  "settings": [
+    { "type": "range", "id": "delay", "label": "Delay before showing (seconds)", "min": 0, "max": 15, "step": 1, "default": 2, "unit": "s" },
+    { "type": "color", "id": "accent_color", "label": "Button color", "default": "#1a1a1a" },
+    { "type": "range", "id": "border_radius", "label": "Corner radius", "min": 0, "max": 24, "step": 1, "default": 14, "unit": "px" }
+  ]
+}
+{% endschema %}

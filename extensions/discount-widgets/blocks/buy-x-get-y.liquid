@@ -10,6 +10,7 @@
 {%- comment -%} === FLOATING BUTTON === {%- endcomment -%}
 <div
   id="sd-fab-{{ block.id }}"
+  data-sd-widget="bxgy_fab"
   style="
     position:fixed;bottom:24px;{{ block.settings.fab_position }}:24px;
     width:{{ block.settings.fab_size }}px;height:{{ block.settings.fab_size }}px;
@@ -35,7 +36,7 @@
   id="sd-popup-{{ block.id }}"
   style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:none;align-items:center;justify-content:center;"
 >
-  <div style="background:#fff;border-radius:12px;max-width:560px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+  <div data-sd-widget="bxgy_popup" style="background:#fff;border-radius:12px;max-width:560px;width:92%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
 
     {%- comment -%} Header {%- endcomment -%}
     <div style="background:{{ block.settings.header_bg }};color:#fff;padding:16px 20px;border-radius:12px 12px 0 0;position:relative;">
@@ -241,6 +242,7 @@ document.addEventListener('DOMContentLoaded', function() {
   {% endif %}
 });
 </script>
+<script src="{{ 'sd-widget-layout.js' | asset_url }}" defer></script>
 
 {% endif %}
 

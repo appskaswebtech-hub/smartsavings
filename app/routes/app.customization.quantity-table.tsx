@@ -4,7 +4,7 @@ import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Layo
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { ColorPickerInput, StickyPreview, DeviceMockup } from "../components/CustomizationWidgets";
+import { ColorPickerInput, StickyPreview, DeviceMockup, LayoutControls, type LayoutValue } from "../components/CustomizationWidgets";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -37,9 +37,11 @@ export default function QuantityTable() {
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [saved, setSaved] = useState(false);
 
+  const [layout, setLayout] = useState<LayoutValue>(config?.layout ?? {});
+
   const handleSave = () => {
     const fd = new FormData();
-    fd.append("config", JSON.stringify({ enabled, headerTitle, buyText, getText, offText, discountFormat, perItemText, newPriceText, textColor, titleBgColor, tableTextColor, borderColor, borderRadius: borderRadiusVal }));
+    fd.append("config", JSON.stringify({ enabled, headerTitle, buyText, getText, offText, discountFormat, perItemText, newPriceText, textColor, titleBgColor, tableTextColor, borderColor, borderRadius: borderRadiusVal, layout }));
     submit(fd, { method: "post" }); setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
 
@@ -69,6 +71,7 @@ export default function QuantityTable() {
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>✏️</span><Text as="h2" variant="headingSm">Headers content</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><TextField label="Title" value={headerTitle} onChange={setHeaderTitle} autoComplete="off" /><TextField label='"Buy" text' value={buyText} onChange={setBuyText} autoComplete="off" /><TextField label='"Get" text' value={getText} onChange={setGetText} autoComplete="off" /></BlockStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>✏️</span><Text as="h2" variant="headingSm">Discount content</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><TextField label='"Off" text' value={offText} onChange={setOffText} autoComplete="off" /><TextField label="Discount format" value={discountFormat} onChange={setDiscountFormat} autoComplete="off" /><TextField label="Per item text" value={perItemText} onChange={setPerItemText} autoComplete="off" /><TextField label="New price text" value={newPriceText} onChange={setNewPriceText} autoComplete="off" /></BlockStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Styles</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><ColorPickerInput label="Text color" value={textColor} onChange={setTextColor} /><ColorPickerInput label="Title background color" value={titleBgColor} onChange={setTitleBgColor} /><ColorPickerInput label="Table text color" value={tableTextColor} onChange={setTableTextColor} /><ColorPickerInput label="Border color" value={borderColor} onChange={setBorderColor} /><RangeSlider label="Border radius" value={borderRadiusVal} onChange={(v) => setBorderRadiusVal(v as number)} min={0} max={20} output suffix="px" /></BlockStack></Card>
+            <Card><BlockStack gap="400"><InlineStack gap="200"><span>📐</span><Text as="h2" variant="headingSm">Size &amp; spacing</Text></InlineStack><LayoutControls value={layout} onChange={setLayout} /></BlockStack></Card>
           </BlockStack>
         </Layout.Section>
         <Layout.Section variant="oneThird">

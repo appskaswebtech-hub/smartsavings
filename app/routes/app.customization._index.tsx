@@ -178,6 +178,33 @@ function FloatingButtonPreview() {
   );
 }
 
+function DiscountCodeInputPreview() {
+  return (
+    <div style={{ border: "1px solid #E0E0E0", borderRadius: "8px", overflow: "hidden", background: "white" }}>
+      <div style={{ padding: "10px 12px", textAlign: "center" as const, fontSize: "10px", fontWeight: 600, color: "#333" }}>
+        🏷️ Have a discount code? Click here to enter it.
+      </div>
+      <div style={{ borderTop: "1px solid #f0f0f0", padding: "8px 12px", display: "flex", gap: "6px", alignItems: "center" }}>
+        <div style={{ flex: 1, border: "1px solid #E0E0E0", borderRadius: "4px", padding: "5px", fontSize: "8px", color: "#aaa" }}>Enter discount code</div>
+        <div style={{ background: "#1a1a1a", color: "white", borderRadius: "4px", padding: "5px 10px", fontSize: "8px", fontWeight: "bold" }}>Apply</div>
+      </div>
+    </div>
+  );
+}
+
+function EmailPopupPreview() {
+  return (
+    <div style={{ background: "rgba(0,0,0,0.45)", borderRadius: "8px", padding: "12px", display: "flex", justifyContent: "center" }}>
+      <div style={{ background: "white", borderRadius: "8px", padding: "10px", width: "130px", boxShadow: "0 4px 14px rgba(0,0,0,0.2)" }}>
+        <div style={{ fontSize: "9px", fontWeight: "bold", marginBottom: "3px" }}>Get your discount code</div>
+        <div style={{ fontSize: "7px", color: "#888", marginBottom: "6px" }}>Enter your email to get the code.</div>
+        <div style={{ border: "1px solid #ddd", borderRadius: "4px", padding: "4px", fontSize: "7px", color: "#aaa", marginBottom: "4px" }}>you@email.com</div>
+        <div style={{ background: "#1a1a1a", color: "white", borderRadius: "4px", padding: "4px", fontSize: "7px", fontWeight: "bold", textAlign: "center" as const }}>Email me the code</div>
+      </div>
+    </div>
+  );
+}
+
 export default function Customization() {
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
@@ -188,6 +215,7 @@ export default function Customization() {
     { id: "cart-goal", content: "Cart goal" },
     { id: "buy-x-get-y", content: "Buy X get Y" },
     { id: "shipping-discount", content: "Shipping discount" },
+    { id: "advanced-discount-code", content: "Advanced discount code" },
   ];
   const handleTabChange = useCallback((i: number) => setSelectedTab(i), []);
 
@@ -199,6 +227,8 @@ export default function Customization() {
     { id: "saving-cart", title: "Saving on cart", desc: 'Customize "Saving & Total" widget on cart.', tags: ["All types"], category: ["all", "bulk-price", "quantity-discount", "cart-goal", "buy-x-get-y"], preview: <SavingOnCartPreview />, route: "/app/customization/saving-cart" },
     { id: "bxgy-fab", title: "Buy X get Y Floating button", desc: "Customize FAB style shown after closing pop-up.", tags: ["Buy X get Y"], category: ["all", "buy-x-get-y"], preview: <FloatingButtonPreview />, route: "/app/customization/bxgy-fab" },
     { id: "shipping-bar", title: "Shipping progress bar", desc: "Change content and style of the progress bar.", tags: ["Shipping discount"], category: ["all", "shipping-discount"], preview: <ShippingBarPreview />, route: "/app/customization/shipping-bar" },
+    { id: "discount-code-input", title: "Discount code input", desc: "Change the on-store discount code box text and style.", tags: ["Advanced discount code"], category: ["all", "advanced-discount-code"], preview: <DiscountCodeInputPreview />, route: "/app/customization/discount-code" },
+    { id: "discount-popup", title: "Discount pop-up", desc: "Change the email pop-up colors and style.", tags: ["Advanced discount code"], category: ["all", "advanced-discount-code"], preview: <EmailPopupPreview />, route: "/app/customization/discount-popup" },
   ];
 
   const tabId = tabs[selectedTab].id;

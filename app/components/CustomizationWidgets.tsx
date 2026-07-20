@@ -1,5 +1,5 @@
-import { Text, InlineStack } from "@shopify/polaris";
-import type { ReactNode } from "react";
+import { Text, InlineStack, BlockStack, TextField } from "@shopify/polaris";
+import type { ReactNode, CSSProperties } from "react";
 
 /* ── Color Picker Input ──────────────────────────────── */
 export function ColorPickerInput({
@@ -215,5 +215,96 @@ export function PlaceholderLines({ count = 3 }: { count?: number }) {
         />
       ))}
     </div>
+  );
+}
+
+/* ── Layout / Size & spacing controls ────────────────── */
+
+export interface LayoutValue {
+  width?: string;
+  height?: string;
+  paddingTop?: string;
+  paddingBottom?: string;
+  paddingLeft?: string;
+  paddingRight?: string;
+  borderColor?: string;
+  borderRadius?: string;
+  fontColor?: string;
+}
+
+/** Build inline styles from a layout object — only applies fields the merchant set. */
+export function layoutStyle(layout?: LayoutValue): CSSProperties {
+  const l = layout || {};
+  const s: CSSProperties = {};
+  const px = (v?: string) => (v !== undefined && v !== "" && !isNaN(Number(v)) ? `${Number(v)}px` : undefined);
+  if (px(l.width)) s.width = px(l.width);
+  if (px(l.height)) s.height = px(l.height);
+  if (px(l.paddingTop)) s.paddingTop = px(l.paddingTop);
+  if (px(l.paddingBottom)) s.paddingBottom = px(l.paddingBottom);
+  if (px(l.paddingLeft)) s.paddingLeft = px(l.paddingLeft);
+  if (px(l.paddingRight)) s.paddingRight = px(l.paddingRight);
+  if (px(l.borderRadius)) s.borderRadius = px(l.borderRadius);
+  if (l.borderColor) {
+    s.borderColor = l.borderColor;
+    s.borderStyle = "solid";
+    s.borderWidth = "1px";
+  }
+  if (l.fontColor) s.color = l.fontColor;
+  return s;
+}
+
+function NumField({ label, value, onChange }: { label: string; value?: string; onChange: (v: string) => void }) {
+  return (
+    <TextField
+      label={label}
+      type="number"
+      min={0}
+      value={value ?? ""}
+      onChange={(v) => {
+        if (v === "" || (!isNaN(Number(v)) && Number(v) >= 0)) onChange(v);
+      }}
+      autoComplete="off"
+      placeholder="auto"
+    />
+  );
+}
+
+/**
+ * Reusable "Size & spacing" controls shared by every customization page.
+ * Edits a single `layout` object; all fields optional (blank = leave widget as-is).
+ */
+export function LayoutControls({
+  value,
+  onChange,
+}: {
+  value: LayoutValue;
+  onChange: (next: LayoutValue) => void;
+}) {
+  const set = (key: keyof LayoutValue) => (v: string) => onChange({ ...value, [key]: v });
+  return (
+    <BlockStack gap="300">
+      <Text as="p" variant="bodySm" tone="subdued">
+        All fields are optional — leave blank to keep the widget's default size and style.
+      </Text>
+
+      <Text as="p" variant="bodySm" fontWeight="bold">Size (px)</Text>
+      <InlineStack gap="300" wrap>
+        <div style={{ width: "140px" }}><NumField label="Width" value={value.width} onChange={set("width")} /></div>
+        <div style={{ width: "140px" }}><NumField label="Height" value={value.height} onChange={set("height")} /></div>
+      </InlineStack>
+
+      <Text as="p" variant="bodySm" fontWeight="bold">Padding (px)</Text>
+      <InlineStack gap="300" wrap>
+        <div style={{ width: "140px" }}><NumField label="Top" value={value.paddingTop} onChange={set("paddingTop")} /></div>
+        <div style={{ width: "140px" }}><NumField label="Bottom" value={value.paddingBottom} onChange={set("paddingBottom")} /></div>
+        <div style={{ width: "140px" }}><NumField label="Left" value={value.paddingLeft} onChange={set("paddingLeft")} /></div>
+        <div style={{ width: "140px" }}><NumField label="Right" value={value.paddingRight} onChange={set("paddingRight")} /></div>
+      </InlineStack>
+
+      <Text as="p" variant="bodySm" fontWeight="bold">Border & text</Text>
+      <ColorPickerInput label="Border color" value={value.borderColor || "#E0E0E0"} onChange={set("borderColor")} />
+      <div style={{ width: "160px" }}><NumField label="Border radius (px)" value={value.borderRadius} onChange={set("borderRadius")} /></div>
+      <ColorPickerInput label="Font / text color" value={value.fontColor || "#333333"} onChange={set("fontColor")} />
+    </BlockStack>
   );
 }

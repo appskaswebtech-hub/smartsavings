@@ -17,6 +17,7 @@
     <div
       class="sd-countdown-banner sd-countdown-{{ block.settings.position }}"
       id="sd-countdown-{{ block.id }}"
+      data-sd-widget="{% if block.settings.timer_type == 'starts_in' %}countdown_start{% else %}countdown_end{% endif %}"
       data-end-date="{{ block.settings.end_date | date: '%Y-%m-%dT%H:%M:%S' }}"
       data-type="{{ block.settings.timer_type }}"
       style="
@@ -77,6 +78,7 @@
 {% endif %}
 
 <script src="{{ 'discount-widgets.js' | asset_url }}" defer></script>
+<script src="{{ 'sd-widget-layout.js' | asset_url }}" defer></script>
 
 {% schema %}
 {

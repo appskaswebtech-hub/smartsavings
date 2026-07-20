@@ -19,7 +19,7 @@
 
   {% if has_discount %}
     {%- comment -%} Savings Widget {%- endcomment -%}
-    <div id="sd-savings-widget" style="border:1px solid {{ block.settings.border_color }};border-radius:{{ block.settings.border_radius }}px;overflow:hidden;margin:16px 0;">
+    <div id="sd-savings-widget" data-sd-widget="saving_cart" style="border:1px solid {{ block.settings.border_color }};border-radius:{{ block.settings.border_radius }}px;overflow:hidden;margin:16px 0;">
       <div style="background:{{ block.settings.header_bg }};color:{{ block.settings.header_text_color }};padding:10px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;">
         <span style="font-size:16px;">💰</span>{{ block.settings.header_title }}
       </div>
@@ -250,6 +250,7 @@
     })();
     </script>
   {% endif %}
+  <script src="{{ 'sd-widget-layout.js' | asset_url }}" defer></script>
 {% endif %}
 
 {% schema %}

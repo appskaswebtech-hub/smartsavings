@@ -4,7 +4,7 @@ import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Chec
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { ColorPickerInput, StickyPreview, DeviceMockup } from "../components/CustomizationWidgets";
+import { ColorPickerInput, StickyPreview, DeviceMockup, LayoutControls, type LayoutValue } from "../components/CustomizationWidgets";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -38,12 +38,13 @@ export default function BxgyPopup() {
   const [addToCartColor, setAddToCartColor] = useState(config?.addToCartColor ?? "#FFFFFF");
   const [saleBadgeColor, setSaleBadgeColor] = useState(config?.saleBadgeColor ?? "#2F1BE2");
   const [dismissBehavior, setDismissBehavior] = useState(config?.dismissBehavior ?? "until_triggered");
+  const [layout, setLayout] = useState<LayoutValue>(config?.layout ?? {});
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
     const fd = new FormData();
-    fd.append("config", JSON.stringify({ enabled, headerTitle, subtitle, selectText, addToCartText, continueText, removeButton, discountBadgeType, showFreeGiftBadge, primaryColor, secondaryColor, borderColor, popupBg, headerBg, addToCartColor, saleBadgeColor, dismissBehavior }));
+    fd.append("config", JSON.stringify({ enabled, headerTitle, subtitle, selectText, addToCartText, continueText, removeButton, discountBadgeType, showFreeGiftBadge, primaryColor, secondaryColor, borderColor, popupBg, headerBg, addToCartColor, saleBadgeColor, dismissBehavior, layout }));
     submit(fd, { method: "post" }); setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
 
@@ -96,6 +97,7 @@ export default function BxgyPopup() {
             <Card><BlockStack gap="400"><Text as="h2" variant="headingSm">Discount badge</Text><Text as="p" variant="bodySm">How the discount appears on badge</Text><InlineStack gap="200"><Button size="slim" variant={discountBadgeType === "percentage" ? "primary" : undefined} onClick={() => setDiscountBadgeType("percentage")}>Percentage</Button><Button size="slim" variant={discountBadgeType === "amount" ? "primary" : undefined} onClick={() => setDiscountBadgeType("amount")}>Amount</Button></InlineStack><Checkbox label='Show "Free Gift" badge' checked={showFreeGiftBadge} onChange={setShowFreeGiftBadge} /></BlockStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Color palette</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><Text as="p" variant="bodySm" fontWeight="bold">Theme colors</Text><ColorPickerInput label="Primary color" value={primaryColor} onChange={setPrimaryColor} /><ColorPickerInput label="Secondary color" value={secondaryColor} onChange={setSecondaryColor} /><ColorPickerInput label="Border color" value={borderColor} onChange={setBorderColor} /><Text as="p" variant="bodySm" fontWeight="bold">Element colors</Text><ColorPickerInput label="Pop-up background" value={popupBg} onChange={setPopupBg} /><ColorPickerInput label="Header background" value={headerBg} onChange={setHeaderBg} /><ColorPickerInput label="Add to cart color" value={addToCartColor} onChange={setAddToCartColor} /><ColorPickerInput label="Sale badge color" value={saleBadgeColor} onChange={setSaleBadgeColor} /></BlockStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>⚙️</span><Text as="h2" variant="headingSm">Advanced</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><Text as="p" variant="bodySm">When should the pop-up be dismissed?</Text><Checkbox label="Dismiss until triggered again" checked={dismissBehavior === "until_triggered"} onChange={() => setDismissBehavior("until_triggered")} /><Checkbox label="Dismiss for 2 minutes after closing" checked={dismissBehavior === "2_minutes"} onChange={() => setDismissBehavior("2_minutes")} /><Checkbox label="Keep displaying until moved to action" checked={dismissBehavior === "keep_displaying"} onChange={() => setDismissBehavior("keep_displaying")} /></BlockStack></Card>
+            <Card><BlockStack gap="400"><InlineStack gap="200"><span>📐</span><Text as="h2" variant="headingSm">Size &amp; spacing</Text></InlineStack><LayoutControls value={layout} onChange={setLayout} /></BlockStack></Card>
           </BlockStack>
         </Layout.Section>
         <Layout.Section variant="oneThird">

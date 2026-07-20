@@ -23,6 +23,7 @@
 {% if block.settings.enabled %}
   <div
     id="sd-shipping-{{ block.id }}"
+    data-sd-widget="shipping_bar"
     data-shop="{{ shop.permanent_domain }}"
     data-current-product-id="{% if product %}{{ product.id }}{% endif %}"
     data-initial="{{ block.settings.initial_message }}"
@@ -299,6 +300,7 @@
       .catch(function() { /* proxy unreachable → stay hidden */ });
   })();
   </script>
+  <script src="{{ 'sd-widget-layout.js' | asset_url }}" defer></script>
 {% endif %}
 
 {% schema %}

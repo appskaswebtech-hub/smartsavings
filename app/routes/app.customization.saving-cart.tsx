@@ -4,7 +4,7 @@ import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Chec
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { ColorPickerInput, StickyPreview, DeviceMockup } from "../components/CustomizationWidgets";
+import { ColorPickerInput, StickyPreview, DeviceMockup, LayoutControls, type LayoutValue } from "../components/CustomizationWidgets";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -32,9 +32,11 @@ export default function SavingOnCart() {
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [saved, setSaved] = useState(false);
 
+  const [layout, setLayout] = useState<LayoutValue>(config?.layout ?? {});
+
   const handleSave = () => {
     const fd = new FormData();
-    fd.append("config", JSON.stringify({ enabled, totalText, savingText, showBorder, borderRadius: borderRadiusVal, totalTextColor, savingTextColor, borderColor }));
+    fd.append("config", JSON.stringify({ enabled, totalText, savingText, showBorder, borderRadius: borderRadiusVal, totalTextColor, savingTextColor, borderColor, layout }));
     submit(fd, { method: "post" }); setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
 
@@ -63,6 +65,7 @@ export default function SavingOnCart() {
             <Card><InlineStack align="space-between" blockAlign="center"><InlineStack gap="200"><span>👁</span><Text as="h2" variant="headingSm">Display widget on store</Text></InlineStack><Button onClick={() => setEnabled(!enabled)} variant={enabled ? "primary" : undefined} size="slim">{enabled ? "ON" : "OFF"}</Button></InlineStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>✏️</span><Text as="h2" variant="headingSm">Content</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><TextField label='"Total" text' value={totalText} onChange={setTotalText} autoComplete="off" /><TextField label='"Saving" text' value={savingText} onChange={setSavingText} autoComplete="off" /></BlockStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Styles</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><Checkbox label="Show a border for Saving section" checked={showBorder} onChange={setShowBorder} /><RangeSlider label="Border radius" value={borderRadiusVal} onChange={(v) => setBorderRadiusVal(v as number)} min={0} max={20} output suffix="px" /><ColorPickerInput label='"Total" text color' value={totalTextColor} onChange={setTotalTextColor} /><ColorPickerInput label='"Saving" text color' value={savingTextColor} onChange={setSavingTextColor} /><ColorPickerInput label="Border color" value={borderColor} onChange={setBorderColor} /></BlockStack></Card>
+            <Card><BlockStack gap="400"><InlineStack gap="200"><span>📐</span><Text as="h2" variant="headingSm">Size &amp; spacing</Text></InlineStack><LayoutControls value={layout} onChange={setLayout} /></BlockStack></Card>
           </BlockStack>
         </Layout.Section>
         <Layout.Section variant="oneThird">

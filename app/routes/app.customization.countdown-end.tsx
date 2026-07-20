@@ -4,7 +4,7 @@ import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Chec
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { ColorPickerInput, StickyPreview, DeviceMockup, PlaceholderLines } from "../components/CustomizationWidgets";
+import { ColorPickerInput, StickyPreview, DeviceMockup, PlaceholderLines, LayoutControls, type LayoutValue } from "../components/CustomizationWidgets";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -45,11 +45,12 @@ export default function CountdownEnd() {
   const [ctaTextColor, setCtaTextColor] = useState("#FFFFFF");
   const [previewMode, setPreviewMode] = useState<"homepage" | "product">("homepage");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
+  const [layout, setLayout] = useState<LayoutValue>(config?.layout ?? {});
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
     const formData = new FormData();
-    formData.append("config", JSON.stringify({ enabled, position, stickyBanner, alwaysVisible, removeCloseIcon, removeCtaButton, title, timerLabels, ctaText, ctaUrl, makeClickable, bgType, bgColor1, bgColor2, gradientAngle, borderRadius, closeIconColor, titleColor, countdownBoxText, countdownNumber, ctaBg, ctaTextColor }));
+    formData.append("config", JSON.stringify({ enabled, position, stickyBanner, alwaysVisible, removeCloseIcon, removeCtaButton, title, timerLabels, ctaText, ctaUrl, makeClickable, bgType, bgColor1, bgColor2, gradientAngle, borderRadius, closeIconColor, titleColor, countdownBoxText, countdownNumber, ctaBg, ctaTextColor, layout }));
     submit(formData, { method: "post" }); setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
 
@@ -81,6 +82,7 @@ export default function CountdownEnd() {
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>✏️</span><Text as="h2" variant="headingSm">Content</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><TextField label="Title" value={title} onChange={setTitle} autoComplete="off" /><Text as="p" variant="bodySm" fontWeight="bold">Timer label</Text><InlineStack gap="200">{(["day", "hr", "min", "sec"] as const).map(key => <Button key={key} size="slim" variant={timerLabels[key] ? "primary" : undefined} onClick={() => setTimerLabels({ ...timerLabels, [key]: !timerLabels[key] })}>{key.charAt(0).toUpperCase() + key.slice(1)}</Button>)}</InlineStack><TextField label="CTA text" value={ctaText} onChange={setCtaText} autoComplete="off" /><TextField label="URL" value={ctaUrl} onChange={setCtaUrl} autoComplete="off" /><Checkbox label="Make entire banner clickable" checked={makeClickable} onChange={setMakeClickable} /></BlockStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Banner style</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><Text as="p" variant="bodySm" fontWeight="bold">Background</Text><InlineStack gap="200"><Button size="slim" variant={bgType === "single" ? "primary" : undefined} onClick={() => setBgType("single")}>Single color</Button><Button size="slim" variant={bgType === "gradient" ? "primary" : undefined} onClick={() => setBgType("gradient")}>Gradient</Button></InlineStack><InlineStack gap="300"><ColorPickerInput label="" value={bgColor1} onChange={setBgColor1} />{bgType === "gradient" && <ColorPickerInput label="" value={bgColor2} onChange={setBgColor2} />}</InlineStack>{bgType === "gradient" && <RangeSlider label="Gradient angle" value={gradientAngle} onChange={(v) => setGradientAngle(v as number)} min={0} max={360} output />}<RangeSlider label="Radius" value={borderRadius} onChange={(v) => setBorderRadius(v as number)} min={0} max={35} output /><ColorPickerInput label="Close icon color" value={closeIconColor} onChange={setCloseIconColor} /></BlockStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Content color</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><ColorPickerInput label="Title" value={titleColor} onChange={setTitleColor} /><ColorPickerInput label="Countdown box and text" value={countdownBoxText} onChange={setCountdownBoxText} /><ColorPickerInput label="Countdown number" value={countdownNumber} onChange={setCountdownNumber} /><ColorPickerInput label="CTA background" value={ctaBg} onChange={setCtaBg} /><ColorPickerInput label="CTA text" value={ctaTextColor} onChange={setCtaTextColor} /></BlockStack></Card>
+            <Card><BlockStack gap="400"><InlineStack gap="200"><span>📐</span><Text as="h2" variant="headingSm">Size &amp; spacing</Text></InlineStack><LayoutControls value={layout} onChange={setLayout} /></BlockStack></Card>
           </BlockStack>
         </Layout.Section>
         <Layout.Section variant="oneThird">

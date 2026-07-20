@@ -4,7 +4,7 @@ import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Chec
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { ColorPickerInput, StickyPreview, DeviceMockup } from "../components/CustomizationWidgets";
+import { ColorPickerInput, StickyPreview, DeviceMockup, LayoutControls, type LayoutValue } from "../components/CustomizationWidgets";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -38,9 +38,11 @@ export default function ShippingBar() {
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [saved, setSaved] = useState(false);
 
+  const [layout, setLayout] = useState<LayoutValue>(config?.layout ?? {});
+
   const handleSave = () => {
     const fd = new FormData();
-    fd.append("config", JSON.stringify({ showOnProduct, showOnCart, initialMessage, inProgressMessage, thresholdMessage, textSize, textColor, bgColor, borderColor, borderRadius: borderRadiusVal, progressBg, progressFg, progressRadius }));
+    fd.append("config", JSON.stringify({ showOnProduct, showOnCart, initialMessage, inProgressMessage, thresholdMessage, textSize, textColor, bgColor, borderColor, borderRadius: borderRadiusVal, progressBg, progressFg, progressRadius, layout }));
     submit(fd, { method: "post" }); setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
 
@@ -68,6 +70,7 @@ export default function ShippingBar() {
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>✏️</span><Text as="h2" variant="headingSm">Content</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><TextField label="Initial message" value={initialMessage} onChange={setInitialMessage} autoComplete="off" helpText="Use {amount} and {discount} as placeholders" /><TextField label="In progress message" value={inProgressMessage} onChange={setInProgressMessage} autoComplete="off" /><TextField label="Threshold reached message" value={thresholdMessage} onChange={setThresholdMessage} autoComplete="off" /></BlockStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Card styles</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><TextField label="Text size" type="number" value={String(textSize)} onChange={(v) => setTextSize(parseInt(v) || 12)} autoComplete="off" suffix="px" /><ColorPickerInput label="Text color" value={textColor} onChange={setTextColor} /><ColorPickerInput label="Background color" value={bgColor} onChange={setBgColor} /><ColorPickerInput label="Border color" value={borderColor} onChange={setBorderColor} /><RangeSlider label="Border radius" value={borderRadiusVal} onChange={(v) => setBorderRadiusVal(v as number)} min={0} max={20} output suffix="px" /></BlockStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Progress bar styles</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><ColorPickerInput label="Background color" value={progressBg} onChange={setProgressBg} /><ColorPickerInput label="Foreground color" value={progressFg} onChange={setProgressFg} /><RangeSlider label="Border radius" value={progressRadius} onChange={(v) => setProgressRadius(v as number)} min={0} max={20} output suffix="px" /></BlockStack></Card>
+            <Card><BlockStack gap="400"><InlineStack gap="200"><span>📐</span><Text as="h2" variant="headingSm">Size &amp; spacing</Text></InlineStack><LayoutControls value={layout} onChange={setLayout} /></BlockStack></Card>
           </BlockStack>
         </Layout.Section>
         <Layout.Section variant="oneThird">

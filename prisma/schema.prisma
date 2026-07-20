@@ -51,11 +51,34 @@ model Campaign {
   shopifyDiscountId  String?   // Discount node id returned by Shopify (so we can delete/update later)
   tiers              String?   // JSON array of tier objects { qty, discount }
   discountedVariants Int       @default(0)
+
+  // Advanced discount code — email-capture popup
+  discountCode       String?   // persisted so the popup email can send it to shoppers
+  popupEnabled       Boolean   @default(false)
+  popupPages         String?   // JSON array e.g. ["all"] or ["index","product","cart"]
+  popupHeading       String?
+  popupDescription   String?
+  popupButtonText    String?
+  popupFrequencyValue Int?     // how long to wait before re-showing after a shopper closes it
+  popupFrequencyUnit  String?  // "minutes" | "hours"
+
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   @@index([shop])
   @@index([shop, status])
+}
+
+model PopupSubmission {
+  id         String   @id @default(cuid())
+  shop       String
+  campaignId String
+  email      String
+  code       String?
+  createdAt  DateTime @default(now())
+
+  @@index([shop])
+  @@index([shop, campaignId])
 }
 
 model Setting {

@@ -4,7 +4,7 @@ import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Chec
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { ColorPickerInput, StickyPreview, DeviceMockup, PlaceholderLines } from "../components/CustomizationWidgets";
+import { ColorPickerInput, StickyPreview, DeviceMockup, PlaceholderLines, LayoutControls, type LayoutValue } from "../components/CustomizationWidgets";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -52,11 +52,12 @@ export default function CountdownStart() {
   const [ctaTextColor, setCtaTextColor] = useState(config?.ctaTextColor ?? "#FFFFFF");
   const [previewMode, setPreviewMode] = useState<"homepage" | "product">("homepage");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
+  const [layout, setLayout] = useState<LayoutValue>(config?.layout ?? {});
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
     const formData = new FormData();
-    formData.append("config", JSON.stringify({ enabled, position, stickyBanner, alwaysVisible, removeCloseIcon, removeCtaButton, title, titleSize, timerLabels, ctaText, ctaSize, ctaUrl, makeClickable, bgType, bgColor1, bgColor2, gradientAngle, borderRadius, closeIconColor, titleColor, countdownBoxText, countdownNumber, ctaBg, ctaTextColor }));
+    formData.append("config", JSON.stringify({ enabled, position, stickyBanner, alwaysVisible, removeCloseIcon, removeCtaButton, title, titleSize, timerLabels, ctaText, ctaSize, ctaUrl, makeClickable, bgType, bgColor1, bgColor2, gradientAngle, borderRadius, closeIconColor, titleColor, countdownBoxText, countdownNumber, ctaBg, ctaTextColor, layout }));
     submit(formData, { method: "post" });
     setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
@@ -147,6 +148,9 @@ export default function CountdownStart() {
               <ColorPickerInput label="CTA background" value={ctaBg} onChange={setCtaBg} />
               <ColorPickerInput label="CTA text" value={ctaTextColor} onChange={setCtaTextColor} />
             </BlockStack></Card>
+
+            {/* Size & spacing */}
+            <Card><BlockStack gap="400"><InlineStack gap="200"><span>📐</span><Text as="h2" variant="headingSm">Size &amp; spacing</Text></InlineStack><LayoutControls value={layout} onChange={setLayout} /></BlockStack></Card>
           </BlockStack>
         </Layout.Section>
 

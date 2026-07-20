@@ -4,7 +4,7 @@ import { Page, Card, Text, BlockStack, InlineStack, Button, Box, Checkbox, Layou
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { ColorPickerInput, StickyPreview, DeviceMockup, PlaceholderLines } from "../components/CustomizationWidgets";
+import { ColorPickerInput, StickyPreview, DeviceMockup, PlaceholderLines, LayoutControls, type LayoutValue } from "../components/CustomizationWidgets";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -32,9 +32,11 @@ export default function BxgyFab() {
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [saved, setSaved] = useState(false);
 
+  const [layout, setLayout] = useState<LayoutValue>(config?.layout ?? {});
+
   const handleSave = () => {
     const fd = new FormData();
-    fd.append("config", JSON.stringify({ enabled, removeCloseButton, position, fabRadius, fabBg, fabIcon, closeBtnColor, closeIconColor }));
+    fd.append("config", JSON.stringify({ enabled, removeCloseButton, position, fabRadius, fabBg, fabIcon, closeBtnColor, closeIconColor, layout }));
     submit(fd, { method: "post" }); setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
 
@@ -47,6 +49,7 @@ export default function BxgyFab() {
             <Card><InlineStack align="space-between" blockAlign="center"><InlineStack gap="200"><span>👁</span><Text as="h2" variant="headingSm">Display widget on store</Text></InlineStack><Button onClick={() => setEnabled(!enabled)} variant={enabled ? "primary" : undefined} size="slim">{enabled ? "ON" : "OFF"}</Button></InlineStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>⚙️</span><Text as="h2" variant="headingSm">General</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><Checkbox label="Remove close button" checked={removeCloseButton} onChange={setRemoveCloseButton} /><Text as="p" variant="bodySm" fontWeight="bold">Floating button position</Text><InlineStack gap="200"><Button size="slim" variant={position === "left" ? "primary" : undefined} onClick={() => setPosition("left")}>Left</Button><Button size="slim" variant={position === "right" ? "primary" : undefined} onClick={() => setPosition("right")}>Right</Button></InlineStack><RangeSlider label="Floating button radius" value={fabRadius} onChange={(v) => setFabRadius(v as number)} min={0} max={50} output /></BlockStack></Card>
             <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Colors</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><ColorPickerInput label="Floating button background" value={fabBg} onChange={setFabBg} /><ColorPickerInput label="Floating button icon" value={fabIcon} onChange={setFabIcon} /><ColorPickerInput label="Close button color" value={closeBtnColor} onChange={setCloseBtnColor} /><ColorPickerInput label="Close button icon" value={closeIconColor} onChange={setCloseIconColor} /></BlockStack></Card>
+            <Card><BlockStack gap="400"><InlineStack gap="200"><span>📐</span><Text as="h2" variant="headingSm">Size &amp; spacing</Text></InlineStack><LayoutControls value={layout} onChange={setLayout} /></BlockStack></Card>
           </BlockStack>
         </Layout.Section>
         <Layout.Section variant="oneThird">
