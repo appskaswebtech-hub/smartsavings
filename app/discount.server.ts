@@ -546,9 +546,19 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
   try {
     // ─── BULK PRICE ───
     if (campaign.type === "bulk_price") {
+      // Shopify rejects appliesOnEachItem: true unless customerGets names specific
+      // items. Derive this from the resolved filter rather than campaign.appliesTo —
+      // getItemsFilter also falls back to { all: true } when ids are missing or
+      // unparseable, and those cases must send false too.
+      const targetsAllItems = "all" in items;
       const value = campaign.discountType === "percentage"
         ? { percentage: campaign.discountValue / 100 }
-        : { discountAmount: { amount: String(campaign.discountValue), appliesToEachItem: true } };
+        : {
+            discountAmount: {
+              amount: String(campaign.discountValue),
+              appliesOnEachItem: !targetsAllItems,
+            },
+          };
 
       const result = await runMutation(admin,
         `#graphql
@@ -567,12 +577,36 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
 
     // ─── QUANTITY DISCOUNT ───
     else if (campaign.type === "quantity_discount" && campaign.tiers) {
+      // Tiers carry their own discountType (set campaign-wide by the admin form).
+      // Anything unrecognised falls back to percentage — the historical behaviour.
+      const targetsAllItemsQty = "all" in items;
       const tiers = JSON.parse(campaign.tiers)
-        .map((t: any) => ({ quantity: parseInt(t.quantity), discount: parseFloat(t.discount) }))
-        .filter((t: any) => !isNaN(t.quantity) && !isNaN(t.discount))
+        .map((t: any) => ({
+          quantity: parseInt(t.quantity),
+          discount: parseFloat(t.discount),
+          discountType: t.discountType === "fixed_amount" ? "fixed_amount" : "percentage",
+        }))
+        // Zero rows are kept in the DB as placeholders but are not valid discounts:
+        // Shopify rejects a 0 minimum quantity and a 0 value independently, so a
+        // tier needs both halves before it's worth sending.
+        .filter((t: any) => !isNaN(t.quantity) && !isNaN(t.discount) && t.quantity > 0 && t.discount > 0)
         .sort((a: any, b: any) => a.quantity - b.quantity);
 
       for (const tier of tiers) {
+        const isFixed = tier.discountType === "fixed_amount";
+        const tierValue = isFixed
+          ? {
+              discountAmount: {
+                amount: String(tier.discount),
+                // Only legal as true when specific items are targeted.
+                appliesOnEachItem: !targetsAllItemsQty,
+              },
+            }
+          : { percentage: tier.discount / 100 };
+        // The title is both merchant-facing and what findMatchingDiscountIds
+        // title-matches on when replacing discounts — keep the "name (…)" shape.
+        const tierLabel = isFixed ? `Save $${tier.discount}` : `Save ${tier.discount}%`;
+
         const result = await runMutation(admin,
           `#graphql
           mutation create($discount: DiscountAutomaticBasicInput!) {
@@ -583,10 +617,10 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
           }`,
           {
             discount: {
-              title: `${campaign.name} (Buy ${tier.quantity}+ Save ${tier.discount}%)`,
+              title: `${campaign.name} (Buy ${tier.quantity}+ ${tierLabel})`,
               startsAt, endsAt,
               minimumRequirement: { quantity: { greaterThanOrEqualToQuantity: String(tier.quantity) } },
-              customerGets: { value: { percentage: tier.discount / 100 }, items },
+              customerGets: { value: tierValue, items },
               combinesWith: { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true },
             },
           }
@@ -600,11 +634,23 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
     // ─── CART GOAL ───
     else if (campaign.type === "cart_goal" && campaign.tiers) {
       const tiers = JSON.parse(campaign.tiers)
-        .map((t: any) => ({ amount: parseFloat(t.amount), discount: parseFloat(t.discount) }))
-        .filter((t: any) => !isNaN(t.amount) && !isNaN(t.discount))
+        .map((t: any) => ({
+          amount: parseFloat(t.amount),
+          discount: parseFloat(t.discount),
+          discountType: t.discountType === "fixed_amount" ? "fixed_amount" : "percentage",
+        }))
+        // Same as the quantity branch: zero placeholders stay saved but aren't sent.
+        .filter((t: any) => !isNaN(t.amount) && !isNaN(t.discount) && t.amount > 0 && t.discount > 0)
         .sort((a: any, b: any) => a.amount - b.amount);
 
       for (const tier of tiers) {
+        const isFixed = tier.discountType === "fixed_amount";
+        // items is hardcoded to { all: true } below, so appliesOnEachItem must be false.
+        const tierValue = isFixed
+          ? { discountAmount: { amount: String(tier.discount), appliesOnEachItem: false } }
+          : { percentage: tier.discount / 100 };
+        const tierLabel = isFixed ? `Save $${tier.discount}` : `Save ${tier.discount}%`;
+
         const result = await runMutation(admin,
           `#graphql
           mutation create($discount: DiscountAutomaticBasicInput!) {
@@ -615,10 +661,10 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
           }`,
           {
             discount: {
-              title: `${campaign.name} (Spend $${tier.amount}+ Save ${tier.discount}%)`,
+              title: `${campaign.name} (Spend $${tier.amount}+ ${tierLabel})`,
               startsAt, endsAt,
               minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: String(tier.amount) } },
-              customerGets: { value: { percentage: tier.discount / 100 }, items: { all: true } },
+              customerGets: { value: tierValue, items: { all: true } },
               combinesWith: { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true },
             },
           }
@@ -715,7 +761,15 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
                 userErrors { field message }
               }
             }`,
-            { discount: { title: campaign.name, code: campaign.discountCode, startsAt, endsAt, destination } }
+            {
+              discount: {
+                title: campaign.name, code: campaign.discountCode, startsAt, endsAt, destination,
+                // Required on create — omitting it fails with "Context can't be blank".
+                // Matches the basic-code branch below; `customerSelection` is deprecated on
+                // current API versions but is the field that exists on the pinned one.
+                customerSelection: { all: true },
+              },
+            }
           );
           const ue = result.data?.discountCodeFreeShippingCreate?.userErrors || [];
           if (ue.length) errors.push(...ue.map((e: any) => e.message));
@@ -724,7 +778,7 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
       } else {
         const value = campaign.discountType === "percentage"
           ? { percentage: campaign.discountValue / 100 }
-          : { discountAmount: { amount: String(campaign.discountValue), appliesToEachItem: false } };
+          : { discountAmount: { amount: String(campaign.discountValue), appliesOnEachItem: false } };
 
         const result = await runMutation(admin,
           `#graphql

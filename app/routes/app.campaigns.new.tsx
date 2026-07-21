@@ -1283,6 +1283,8 @@ function DiscountPreview({
   discountValue,
   tiers,
   cartTiers,
+  tierDiscountType,
+  cartTierDiscountType,
   freeShipping,
   minOrderForShipping,
   appliesTo,
@@ -1294,6 +1296,8 @@ function DiscountPreview({
   discountValue: string;
   tiers: { quantity: string; discount: string }[];
   cartTiers: { amount: string; discount: string }[];
+  tierDiscountType: "percentage" | "fixed_amount";
+  cartTierDiscountType: "percentage" | "fixed_amount";
   freeShipping: boolean;
   minOrderForShipping: string;
   appliesTo: string;
@@ -1305,9 +1309,9 @@ function DiscountPreview({
 
   const getQuantityDiscount = (qty: number) => {
     const validTiers = tiers
-      .filter(t => t.quantity && t.discount)
       .map(t => ({ quantity: parseInt(t.quantity), discount: parseFloat(t.discount) }))
-      .filter(t => !isNaN(t.quantity) && !isNaN(t.discount))
+      // Numeric, not truthiness: tier fields are strings and "0" is truthy.
+      .filter(t => t.quantity > 0 && t.discount > 0)
       .sort((a, b) => b.quantity - a.quantity);
     const match = validTiers.find(t => qty >= t.quantity);
     return match ? match.discount : 0;
@@ -1315,18 +1319,36 @@ function DiscountPreview({
 
   const getCartGoalDiscount = (totalAmount: number) => {
     const validTiers = cartTiers
-      .filter(t => t.amount && t.discount)
       .map(t => ({ amount: parseFloat(t.amount), discount: parseFloat(t.discount) }))
-      .filter(t => !isNaN(t.amount) && !isNaN(t.discount))
+      .filter(t => t.amount > 0 && t.discount > 0)
       .sort((a, b) => b.amount - a.amount);
     const match = validTiers.find(t => totalAmount >= t.amount);
     return match ? match.discount : 0;
   };
 
+  // Tiers that are actually offers. Numeric comparison, not truthiness: these
+  // fields are strings and "0" is truthy, so a 0/0 placeholder row would
+  // otherwise count as a live tier here and in the badges below.
+  const liveTiers = tiers.filter(
+    (t) => parseFloat(t.quantity) > 0 && parseFloat(t.discount) > 0
+  );
+  const liveCartTiers = cartTiers.filter(
+    (t) => parseFloat(t.amount) > 0 && parseFloat(t.discount) > 0
+  );
+
+  // "Save 5%" vs "Save $5" — one string, so <Badge> gets a single child.
+  const tierLabel = (v: string, dt: "percentage" | "fixed_amount") =>
+    dt === "fixed_amount" ? `Save $${v}` : `Save ${v}%`;
+  const offLabel = (v: string | number, dt: "percentage" | "fixed_amount") =>
+    dt === "fixed_amount" ? `$${v} off` : `${v}% off`;
+
   const cartTotal = samplePrice * cartQty;
   let discountPercent = 0;
   let discountAmount = 0;
   let finalTotal = cartTotal;
+  // The raw tier number that matched (percent or dollars) — used for the banners,
+  // which can't key off discountPercent since that stays 0 for fixed amounts.
+  let activeTierValue = 0;
 
   if (type === "bulk_price") {
     if (discountType === "percentage") {
@@ -1338,11 +1360,24 @@ function DiscountPreview({
       discountAmount = (samplePrice - discountVal) * cartQty;
     }
   } else if (type === "quantity_discount") {
-    discountPercent = getQuantityDiscount(cartQty);
-    discountAmount = cartTotal * (discountPercent / 100);
+    activeTierValue = getQuantityDiscount(cartQty);
+    if (tierDiscountType === "fixed_amount") {
+      // Mirrors the backend: per-item only when specific items are targeted,
+      // otherwise the amount comes off the order once.
+      discountAmount = appliesTo === "all" ? activeTierValue : activeTierValue * cartQty;
+    } else {
+      discountPercent = activeTierValue;
+      discountAmount = cartTotal * (activeTierValue / 100);
+    }
   } else if (type === "cart_goal") {
-    discountPercent = getCartGoalDiscount(cartTotal);
-    discountAmount = cartTotal * (discountPercent / 100);
+    activeTierValue = getCartGoalDiscount(cartTotal);
+    if (cartTierDiscountType === "fixed_amount") {
+      // Cart goal always targets all items, so it never applies per item.
+      discountAmount = activeTierValue;
+    } else {
+      discountPercent = activeTierValue;
+      discountAmount = cartTotal * (activeTierValue / 100);
+    }
   }
 
   discountAmount = Math.max(0, discountAmount);
@@ -1386,10 +1421,10 @@ function DiscountPreview({
               <Box padding="200" background="bg-surface" borderRadius="200">
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm" fontWeight="bold">Buy more, Save more!</Text>
-                  {tiers.filter(t => t.quantity && t.discount).map((tier, i) => (
+                  {liveTiers.map((tier, i) => (
                     <InlineStack key={i} align="space-between">
                       <Text as="span" variant="bodySm">Buy {tier.quantity}+</Text>
-                      <Badge tone="success">Save {tier.discount}%</Badge>
+                      <Badge tone="success">{tierLabel(tier.discount, tierDiscountType)}</Badge>
                     </InlineStack>
                   ))}
                 </BlockStack>
@@ -1400,10 +1435,10 @@ function DiscountPreview({
               <Box padding="200" background="bg-surface" borderRadius="200">
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm" fontWeight="bold">Spend more, Save more!</Text>
-                  {cartTiers.filter(t => t.amount && t.discount).map((tier, i) => (
+                  {liveCartTiers.map((tier, i) => (
                     <InlineStack key={i} align="space-between">
                       <Text as="span" variant="bodySm">Spend ${tier.amount}+</Text>
-                      <Badge tone="success">Save {tier.discount}%</Badge>
+                      <Badge tone="success">{tierLabel(tier.discount, cartTierDiscountType)}</Badge>
                     </InlineStack>
                   ))}
                 </BlockStack>
@@ -1475,31 +1510,31 @@ function DiscountPreview({
                   <Button size="slim" onClick={() => setCartQty(cartQty + 1)}>+</Button>
                 </InlineStack>
 
-                {type === "quantity_discount" && discountPercent > 0 && (
+                {type === "quantity_discount" && activeTierValue > 0 && (
                   <Box padding="200" background="bg-surface-success" borderRadius="200">
                     <Text as="p" variant="bodySm" tone="success" alignment="center" fontWeight="bold">
-                      {discountPercent}% discount applied (qty: {cartQty})
+                      {offLabel(activeTierValue, tierDiscountType)} discount applied (qty: {cartQty})
                     </Text>
                   </Box>
                 )}
-                {type === "quantity_discount" && discountPercent === 0 && tiers.some(t => t.quantity && t.discount) && (
+                {type === "quantity_discount" && activeTierValue === 0 && liveTiers.length > 0 && (
                   <Box padding="200" background="bg-surface-warning" borderRadius="200">
                     <Text as="p" variant="bodySm" tone="caution" alignment="center">
-                      Add {parseInt(tiers.filter(t => t.quantity)[0]?.quantity || "2") - cartQty} more to unlock {tiers.filter(t => t.discount)[0]?.discount}% off
+                      Add {parseInt(liveTiers[0]?.quantity || "2") - cartQty} more to unlock {offLabel(liveTiers[0]?.discount ?? "", tierDiscountType)}
                     </Text>
                   </Box>
                 )}
-                {type === "cart_goal" && discountPercent > 0 && (
+                {type === "cart_goal" && activeTierValue > 0 && (
                   <Box padding="200" background="bg-surface-success" borderRadius="200">
                     <Text as="p" variant="bodySm" tone="success" alignment="center" fontWeight="bold">
-                      {discountPercent}% discount applied (cart: ${cartTotal.toFixed(2)})
+                      {offLabel(activeTierValue, cartTierDiscountType)} discount applied (cart: ${cartTotal.toFixed(2)})
                     </Text>
                   </Box>
                 )}
-                {type === "cart_goal" && discountPercent === 0 && cartTiers.some(t => t.amount && t.discount) && (
+                {type === "cart_goal" && activeTierValue === 0 && liveCartTiers.length > 0 && (
                   <Box padding="200" background="bg-surface-warning" borderRadius="200">
                     <Text as="p" variant="bodySm" tone="caution" alignment="center">
-                      Spend ${(parseFloat(cartTiers.filter(t => t.amount)[0]?.amount || "50") - cartTotal).toFixed(2)} more to unlock {cartTiers.filter(t => t.discount)[0]?.discount}% off
+                      Spend ${(parseFloat(liveCartTiers[0]?.amount || "50") - cartTotal).toFixed(2)} more to unlock {offLabel(liveCartTiers[0]?.discount ?? "", cartTierDiscountType)}
                     </Text>
                   </Box>
                 )}
@@ -1547,8 +1582,8 @@ function DiscountPreview({
                 {type === "bulk_price" && discountType === "percentage" && `${discountVal}% off`}
                 {type === "bulk_price" && discountType === "fixed_amount" && `$${discountVal} off`}
                 {type === "bulk_price" && discountType === "new_price" && `New price: $${discountVal}`}
-                {type === "quantity_discount" && `${tiers.filter(t => t.quantity && t.discount).length} tier(s)`}
-                {type === "cart_goal" && `${cartTiers.filter(t => t.amount && t.discount).length} tier(s)`}
+                {type === "quantity_discount" && `${liveTiers.length} tier(s)`}
+                {type === "cart_goal" && `${liveCartTiers.length} tier(s)`}
                 {type === "shipping_discount" && (freeShipping ? "Free shipping" : `$${discountVal} off shipping`)}
                 {type === "buy_x_get_y" && `Buy ${discountValue || "X"} Get 1`}
                 {type === "advanced_discount_code" && (discountType === "free_shipping" ? "Free shipping" : `${discountVal}${discountType === "percentage" ? "%" : "$"} off`)}
@@ -1600,6 +1635,10 @@ export default function NewCampaign() {
   const [hasEndDate, setHasEndDate] = useState(false);
   const [endDate, setEndDate] = useState("");
   const [status, setStatus] = useState("active");
+  // Tier discount type is campaign-level (one setting for every tier), matching
+  // the edit page. It gets stamped onto each tier when the form is submitted.
+  const [tierDiscountType, setTierDiscountType] = useState<"percentage" | "fixed_amount">("percentage");
+  const [cartTierDiscountType, setCartTierDiscountType] = useState<"percentage" | "fixed_amount">("percentage");
   const [tiers, setTiers] = useState([
     { quantity: "2", discount: "5" },
     { quantity: "4", discount: "10" },
@@ -1801,8 +1840,18 @@ export default function NewCampaign() {
     if (selectedCollections.length > 0) {
       formData.append("collectionIds", JSON.stringify(selectedCollections.map((c) => c.id)));
     }
-    if (type === "quantity_discount") formData.append("tiers", JSON.stringify(tiers));
-    else if (type === "cart_goal") formData.append("tiers", JSON.stringify(cartTiers));
+    // Stamp the campaign-level discount type onto every tier — discount.server.ts
+    // and the storefront widgets read it per tier.
+    if (type === "quantity_discount")
+      formData.append(
+        "tiers",
+        JSON.stringify(tiers.map((t) => ({ ...t, discountType: tierDiscountType })))
+      );
+    else if (type === "cart_goal")
+      formData.append(
+        "tiers",
+        JSON.stringify(cartTiers.map((t) => ({ ...t, discountType: cartTierDiscountType })))
+      );
 
     submit(formData, { method: "post" });
   };
@@ -1892,6 +1941,20 @@ export default function NewCampaign() {
                     <Text as="p" variant="bodySm" tone="subdued">
                       Set up tiered discounts based on quantity purchased.
                     </Text>
+                    <Select
+                      label="Discount type"
+                      options={[
+                        { label: "Percentage off", value: "percentage" },
+                        { label: "Fixed amount off", value: "fixed_amount" },
+                      ]}
+                      value={tierDiscountType}
+                      onChange={(v) => setTierDiscountType(v as "percentage" | "fixed_amount")}
+                      helpText={
+                        tierDiscountType === "fixed_amount"
+                          ? "Applies to all products: the amount comes off the order once. Scoped to specific products: it comes off each qualifying item."
+                          : undefined
+                      }
+                    />
                     {tiers.map((tier, i) => (
                       <InlineStack key={i} gap="200" blockAlign="end">
                         <div style={{ flex: 1 }}>
@@ -1908,14 +1971,14 @@ export default function NewCampaign() {
                         </div>
                         <div style={{ flex: 1 }}>
                           <TextField
-                            label={i === 0 ? "Discount %" : ""}
+                            label={i === 0 ? "Discount" : ""}
                             type="number"
                             min={0}
                             value={tier.discount}
                             onChange={(v) => updateTier(i, "discount", v)}
                             autoComplete="off"
-                            prefix="Save"
-                            suffix="%"
+                            prefix={tierDiscountType === "fixed_amount" ? "Save $" : "Save"}
+                            suffix={tierDiscountType === "fixed_amount" ? undefined : "%"}
                           />
                         </div>
                         <Button
@@ -2037,6 +2100,15 @@ export default function NewCampaign() {
                     <Text as="p" variant="bodySm" tone="subdued">
                       Set minimum cart values and their corresponding discounts.
                     </Text>
+                    <Select
+                      label="Discount type"
+                      options={[
+                        { label: "Percentage off", value: "percentage" },
+                        { label: "Fixed amount off", value: "fixed_amount" },
+                      ]}
+                      value={cartTierDiscountType}
+                      onChange={(v) => setCartTierDiscountType(v as "percentage" | "fixed_amount")}
+                    />
                     {cartTiers.map((tier, i) => (
                       <InlineStack key={i} gap="200" blockAlign="end">
                         <div style={{ flex: 1 }}>
@@ -2052,14 +2124,14 @@ export default function NewCampaign() {
                         </div>
                         <div style={{ flex: 1 }}>
                           <TextField
-                            label={i === 0 ? "Discount %" : ""}
+                            label={i === 0 ? "Discount" : ""}
                             type="number"
                             min={0}
                             value={tier.discount}
                             onChange={(v) => updateCartTier(i, "discount", v)}
                             autoComplete="off"
-                            prefix="Save"
-                            suffix="%"
+                            prefix={cartTierDiscountType === "fixed_amount" ? "Save $" : "Save"}
+                            suffix={cartTierDiscountType === "fixed_amount" ? undefined : "%"}
                           />
                         </div>
                         <Button
@@ -2472,6 +2544,8 @@ export default function NewCampaign() {
             discountValue={discountValue}
             tiers={tiers}
             cartTiers={cartTiers}
+            tierDiscountType={tierDiscountType}
+            cartTierDiscountType={cartTierDiscountType}
             freeShipping={freeShipping}
             minOrderForShipping={minOrderForShipping}
             appliesTo={appliesTo}

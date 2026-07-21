@@ -99,6 +99,22 @@ document.addEventListener('DOMContentLoaded', function() {
   var T = [];
   var lastQ = -1;
   var mode = box.dataset.mode || 'auto';
+  // Fixed-amount tiers only come off each item when the campaign targets specific
+  // products; on an all-products campaign Shopify takes the amount off once.
+  var fixedPerItem = false;
+
+  // Normalize a tier from the proxy, keeping its discount type.
+  function normalizeTier(t) {
+    return {
+      q: parseInt(t.quantity || t.qty || t.q),
+      d: parseFloat(t.discount || t.disc || t.d),
+      dt: t.discountType === 'fixed_amount' ? 'fixed_amount' : 'percentage'
+    };
+  }
+
+  function tierLabel(t) {
+    return t.dt === 'fixed_amount' ? S + t.d + ' off' : t.d + '% off';
+  }
 
   function showTable() { box.style.display = 'block'; }
   function hideTable() { box.style.display = 'none'; if (dpriceEl) dpriceEl.style.display = 'none'; }
@@ -108,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function() {
     T = tiers.sort(function(a,b){ return a.q - b.q; });
     var html = '';
     T.forEach(function(t) {
-      html += '<div class="sd-r" data-q="'+t.q+'" data-d="'+t.d+'" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;font-size:13px;color:'+tableTextColor+';border-top:1px solid rgba(0,0,0,0.06);transition:all 0.2s;"><span>'+t.q+'+</span><span style="color:'+savingsColor+';font-weight:600;">'+t.d+'% off</span></div>';
+      html += '<div class="sd-r" data-q="'+t.q+'" data-d="'+t.d+'" style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;font-size:13px;color:'+tableTextColor+';border-top:1px solid rgba(0,0,0,0.06);transition:all 0.2s;"><span>'+t.q+'+</span><span style="color:'+savingsColor+';font-weight:600;">'+tierLabel(t)+'</span></div>';
     });
     tiersContainer.innerHTML = html;
     T.forEach(function(t, i) { t.el = tiersContainer.children[i]; });
@@ -156,9 +172,9 @@ document.addEventListener('DOMContentLoaded', function() {
     fetchAndMatch(null)
       .then(function(matched) {
         if (matched && matched.tiers && matched.tiers.length > 0) {
-          var tiers = matched.tiers.map(function(t) {
-            return { q: parseInt(t.quantity || t.qty || t.q), d: parseFloat(t.discount || t.disc || t.d) };
-          }).filter(function(t) { return !isNaN(t.q) && !isNaN(t.d); });
+          fixedPerItem = matched.appliesTo !== 'all';
+          var tiers = matched.tiers.map(normalizeTier)
+            .filter(function(t) { return t.q > 0 && t.d > 0; });
           if (tiers.length > 0) { renderTiers(tiers); return; }
         }
         hideTable();
@@ -204,9 +220,9 @@ document.addEventListener('DOMContentLoaded', function() {
       fetchAndMatch(code)
         .then(function(matched) {
           if (matched && matched.tiers && matched.tiers.length > 0) {
-            var tiers = matched.tiers.map(function(t) {
-              return { q: parseInt(t.quantity || t.qty || t.q), d: parseFloat(t.discount || t.disc || t.d) };
-            }).filter(function(t) { return !isNaN(t.q) && !isNaN(t.d); });
+            fixedPerItem = matched.appliesTo !== 'all';
+            var tiers = matched.tiers.map(normalizeTier)
+              .filter(function(t) { return t.q > 0 && t.d > 0; });
 
             if (tiers.length > 0) {
               // Hide coupon section, show tiers
@@ -246,15 +262,23 @@ document.addEventListener('DOMContentLoaded', function() {
     for (var i = 0; i < T.length; i++) { if (q < T[i].q) { nxt = T[i]; break; } }
     T.forEach(function(t) { if (t.el) { t.el.classList.remove('sd-tier-active'); t.el.style.background=''; t.el.style.borderLeft=''; t.el.style.fontWeight=''; } });
     if (act && act.el) act.el.classList.add('sd-tier-active');
-    var dp = act ? P*(1-act.d/100) : P;
-    var ts = act ? (P-dp)*q : 0;
+    // Total savings first, then derive the effective per-item price from it \u2014
+    // a fixed amount on an all-products campaign comes off the order once, so it
+    // can't be expressed as a flat per-item reduction.
+    var ts = 0;
+    if (act) {
+      if (act.dt === 'fixed_amount') ts = fixedPerItem ? act.d * q : act.d;
+      else ts = P * q * (act.d / 100);
+      ts = Math.min(ts, P * q);
+    }
+    var dp = act && q > 0 ? (P * q - ts) / q : P;
     if (act && calcEl) {
       calcEl.style.display='block';
-      calcEl.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:13px;">Price per item:</span><span><s style="color:#999;font-size:12px;margin-right:6px;">'+S+P.toFixed(2)+'</s><b style="color:'+savingsColor+';font-size:15px;">'+S+dp.toFixed(2)+'</b></span></div><div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:13px;">Total savings:</span><b style="color:'+savingsColor+';font-size:14px;">-'+S+ts.toFixed(2)+' ('+act.d+'% off)</b></div>';
+      calcEl.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:13px;">Price per item:</span><span><s style="color:#999;font-size:12px;margin-right:6px;">'+S+P.toFixed(2)+'</s><b style="color:'+savingsColor+';font-size:15px;">'+S+dp.toFixed(2)+'</b></span></div><div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:13px;">Total savings:</span><b style="color:'+savingsColor+';font-size:14px;">-'+S+ts.toFixed(2)+' ('+tierLabel(act)+')</b></div>';
     } else if (calcEl) calcEl.style.display='none';
     if (hintEl) {
-      if (!act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more to unlock '+nxt.d+'% off!'; }
-      else if (act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more for '+nxt.d+'% off (saving '+act.d+'% now)'; }
+      if (!act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more to unlock '+tierLabel(nxt)+'!'; }
+      else if (act && nxt) { hintEl.style.display='block'; hintEl.textContent='\uD83D\uDCA1 Add '+(nxt.q-q)+' more for '+tierLabel(nxt)+' (saving '+tierLabel(act)+' now)'; }
       else hintEl.style.display='none';
     }
     if (realPrice) {

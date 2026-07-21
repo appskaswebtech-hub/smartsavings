@@ -46,13 +46,15 @@
 
     function render(tiers) {
       tiers.sort(function(a,b){ return a.amount - b.amount; });
+      // "SAVE 10%" vs "SAVE $10", depending on the tier's discount type.
+      function tierAmt(t) { return t.discountType === 'fixed_amount' ? S + t.discount : t.discount + '%'; }
       var html = '';
       var activeTier = null, nextTier = null, foundNext = false;
       tiers.forEach(function(t) {
         var reached = cartTotal >= t.amount;
         if (reached) activeTier = t;
         else if (!foundNext) { nextTier = t; foundNext = true; }
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;font-size:13px;border-top:1px solid rgba(0,0,0,0.06);transition:all 0.2s;'+(reached?'background:rgba(16,185,129,0.08);border-left:3px solid '+activeColor+';':'')+'"><span style="color:'+textColor+';'+(reached?'font-weight:700;':'')+'">Spend '+S+t.amount+'+</span><span style="background:'+(reached?activeColor:badgeColor)+';color:white;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;">'+(reached?'✓ ':'')+'SAVE '+t.discount+'%</span></div>';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;font-size:13px;border-top:1px solid rgba(0,0,0,0.06);transition:all 0.2s;'+(reached?'background:rgba(16,185,129,0.08);border-left:3px solid '+activeColor+';':'')+'"><span style="color:'+textColor+';'+(reached?'font-weight:700;':'')+'">Spend '+S+t.amount+'+</span><span style="background:'+(reached?activeColor:badgeColor)+';color:white;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;">'+(reached?'✓ ':'')+'SAVE '+tierAmt(t)+'</span></div>';
       });
       tiersEl.innerHTML = html;
 
@@ -60,16 +62,19 @@
       if (nextTier) {
         var remaining = (nextTier.amount - cartTotal).toFixed(2);
         var progress = Math.min(100, (cartTotal / nextTier.amount) * 100);
-        pHtml += '<div style="font-size:13px;color:'+textColor+';margin-bottom:8px;font-weight:600;">'+(activeTier ? '✅ Saving '+activeTier.discount+'% — add '+S+remaining+' more for '+nextTier.discount+'% off!' : 'Add '+S+remaining+' more to unlock '+nextTier.discount+'% off!')+'</div>';
+        pHtml += '<div style="font-size:13px;color:'+textColor+';margin-bottom:8px;font-weight:600;">'+(activeTier ? '✅ Saving '+tierAmt(activeTier)+' — add '+S+remaining+' more for '+tierAmt(nextTier)+' off!' : 'Add '+S+remaining+' more to unlock '+tierAmt(nextTier)+' off!')+'</div>';
         pHtml += '<div style="background:'+progressBg+';border-radius:'+progressRadius+'px;height:8px;overflow:hidden;"><div style="background:'+activeColor+';width:'+progress+'%;height:100%;border-radius:'+progressRadius+'px;transition:width 0.5s;"></div></div>';
       } else if (activeTier) {
-        pHtml += '<div style="font-size:13px;color:'+activeColor+';font-weight:700;text-align:center;">🎉 Maximum discount unlocked — saving '+activeTier.discount+'%!</div>';
+        pHtml += '<div style="font-size:13px;color:'+activeColor+';font-weight:700;text-align:center;">🎉 Maximum discount unlocked — saving '+tierAmt(activeTier)+'!</div>';
       }
       pHtml += '</div>';
       progressEl.innerHTML = pHtml;
 
       if (activeTier) {
-        var savingsAmount = (cartTotal * activeTier.discount / 100).toFixed(2);
+        var savingsRaw = activeTier.discountType === 'fixed_amount'
+          ? activeTier.discount
+          : cartTotal * activeTier.discount / 100;
+        var savingsAmount = Math.min(savingsRaw, cartTotal).toFixed(2);
         savingsEl.innerHTML = '<div style="padding:10px 16px;border-top:2px solid '+activeColor+';background:rgba(16,185,129,0.04);display:flex;justify-content:space-between;align-items:center;font-size:14px;"><span style="font-weight:700;color:'+activeColor+';">Your savings</span><span style="font-weight:700;color:'+activeColor+';font-size:16px;">-'+S+savingsAmount+'</span></div>';
       } else { savingsEl.innerHTML = ''; }
 
@@ -86,8 +91,12 @@
         }
         if (matched && matched.tiers && matched.tiers.length > 0) {
           var tiers = matched.tiers.map(function(t) {
-            return { amount: parseFloat(t.amount || t.spend || t.q), discount: parseFloat(t.discount || t.d) };
-          }).filter(function(t) { return !isNaN(t.amount) && !isNaN(t.discount); });
+            return {
+              amount: parseFloat(t.amount || t.spend || t.q),
+              discount: parseFloat(t.discount || t.d),
+              discountType: t.discountType === 'fixed_amount' ? 'fixed_amount' : 'percentage'
+            };
+          }).filter(function(t) { return t.amount > 0 && t.discount > 0; });
           if (tiers.length > 0) { render(tiers); return; }
         }
         hideWidget();
