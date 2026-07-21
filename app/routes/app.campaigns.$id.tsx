@@ -2368,16 +2368,18 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   } catch {}
 
   let emailSignups: { id: string; email: string; createdAt: string }[] = [];
-  if ((campaign as any).popupEnabled && campaign.type === "advanced_discount_code") {
-    const rows = await (db as any).emailSignup.findMany({
-      where: { campaignId: campaign.id },
-      orderBy: { createdAt: "desc" },
-    });
-    emailSignups = rows.map((r: any) => ({
-      id: r.id,
-      email: r.email,
-      createdAt: new Date(r.createdAt).toLocaleString(),
-    }));
+  if (campaign.popupEnabled && campaign.type === "advanced_discount_code") {
+    try {
+      const rows = await db.popupSubmission.findMany({
+        where: { shop, campaignId: campaign.id },
+        orderBy: { createdAt: "desc" },
+      });
+      emailSignups = rows.map((r) => ({
+        id: r.id,
+        email: r.email,
+        createdAt: new Date(r.createdAt).toLocaleString(),
+      }));
+    } catch {}
   }
 
   return json({
@@ -2710,9 +2712,17 @@ export default function CampaignDetail() {
                     : <Badge tone="critical">Disabled</Badge>}
                 </BlockStack>
                 <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">Shows after</Text>
+                  <Text as="p" variant="bodyMd">
+                    {(campaign as any).popupDelaySeconds == null
+                      ? "Theme default"
+                      : `${(campaign as any).popupDelaySeconds} seconds`}
+                  </Text>
+                </BlockStack>
+                <BlockStack gap="100">
                   <Text as="p" variant="bodySm" tone="subdued">Re-show after closing</Text>
                   <Text as="p" variant="bodyMd">
-                    {(campaign as any).reDisplayValue ?? 24} {(campaign as any).reDisplayUnit ?? "hours"}
+                    {(campaign as any).popupFrequencyValue ?? 24} {(campaign as any).popupFrequencyUnit ?? "hours"}
                   </Text>
                 </BlockStack>
                 <BlockStack gap="100">

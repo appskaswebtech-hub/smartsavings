@@ -47,7 +47,14 @@ model Campaign {
   minimumQuantity    Int?
   maximumQuantity    Int?
   minimumAmount      Float?    // Minimum order value (for shipping_discount, cart_goal, etc.)
+  requirementType    String    @default("amount") // amount, quantity, both, either — which minimum(s) apply
   geoTarget          String?   // "domestic" | "all" — for shipping_discount campaigns
+
+  // Which other discount types this campaign may stack with
+  combineWithProducts Boolean  @default(true)
+  combineWithOrders   Boolean  @default(true)
+  combineWithShipping Boolean  @default(true)
+
   shopifyDiscountId  String?   // Discount node id returned by Shopify (so we can delete/update later)
   tiers              String?   // JSON array of tier objects { qty, discount }
   discountedVariants Int       @default(0)
@@ -59,6 +66,7 @@ model Campaign {
   popupHeading       String?
   popupDescription   String?
   popupButtonText    String?
+  popupDelaySeconds  Int?      // wait this long before first showing the popup; null = use the theme app-embed default
   popupFrequencyValue Int?     // how long to wait before re-showing after a shopper closes it
   popupFrequencyUnit  String?  // "minutes" | "hours"
 

@@ -2878,7 +2878,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const popupHeading = (formData.get("popupHeading") as string) || "Get your exclusive discount!";
   const popupBody = (formData.get("popupBody") as string) || "Enter your email below to reveal your discount code.";
   const popupButtonText = (formData.get("popupButtonText") as string) || "Reveal my code";
-  const popupPages = (formData.get("popupPages") as string) || "all";
+  // Blank means "use the theme app-embed default" — stays null so it can't be
+  // confused with an explicit 0 (show the popup immediately).
+  const popupDelayRaw = ((formData.get("popupDelaySeconds") as string) || "").trim();
+  const popupDelaySeconds =
+    popupDelayRaw && !isNaN(parseInt(popupDelayRaw, 10))
+      ? Math.max(0, parseInt(popupDelayRaw, 10))
+      : null;
+  const popupPages = (formData.get("popupPages") as string) || JSON.stringify(["all"]);
 
   if (!name || name.trim() === "") {
     return json({ success: false, error: "Campaign name is required" });
@@ -2936,14 +2943,15 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       combineWithProducts,
       combineWithOrders,
       combineWithShipping,
-      reDisplayValue,
-      reDisplayUnit,
       discountCode: discountCode || null,
       popupEnabled,
       popupHeading,
-      popupBody,
+      popupDescription: popupBody,
       popupButtonText,
       popupPages,
+      popupDelaySeconds,
+      popupFrequencyValue: reDisplayValue,
+      popupFrequencyUnit: reDisplayUnit,
       updatedAt: new Date(),
     },
   });
@@ -3123,18 +3131,23 @@ export default function EditCampaign() {
     String(campaign.discountValue ?? "10")
   );
   const [discountCode, setDiscountCode] = useState(existingDiscountCode || "");
-  const [reDisplayValue, setReDisplayValue] = useState(String((campaign as any).reDisplayValue ?? 24));
-  const [reDisplayUnit, setReDisplayUnit] = useState((campaign as any).reDisplayUnit ?? "hours");
-  const [popupEnabled, setPopupEnabled] = useState<boolean>((campaign as any).popupEnabled ?? false);
-  const [popupHeading, setPopupHeading] = useState<string>((campaign as any).popupHeading ?? "Get your exclusive discount!");
-  const [popupBody, setPopupBody] = useState<string>((campaign as any).popupBody ?? "Enter your email below to reveal your discount code.");
-  const [popupButtonText, setPopupButtonText] = useState<string>((campaign as any).popupButtonText ?? "Reveal my code");
-  const _rawPages = (campaign as any).popupPages ?? "all";
-  const [popupPageScope, setPopupPageScope] = useState<string>(_rawPages === "all" ? "all" : "specific");
+  const [reDisplayValue, setReDisplayValue] = useState(String(campaign.popupFrequencyValue ?? 24));
+  const [reDisplayUnit, setReDisplayUnit] = useState(campaign.popupFrequencyUnit ?? "hours");
+  const [popupEnabled, setPopupEnabled] = useState<boolean>(campaign.popupEnabled ?? false);
+  const [popupHeading, setPopupHeading] = useState<string>(campaign.popupHeading ?? "Get your exclusive discount!");
+  const [popupBody, setPopupBody] = useState<string>(campaign.popupDescription ?? "Enter your email below to reveal your discount code.");
+  const [popupButtonText, setPopupButtonText] = useState<string>(campaign.popupButtonText ?? "Reveal my code");
+  // Blank = fall back to the theme app-embed delay, so keep null distinct from 0.
+  const [popupDelaySeconds, setPopupDelaySeconds] = useState<string>(
+    campaign.popupDelaySeconds == null ? "" : String(campaign.popupDelaySeconds)
+  );
+  // popupPages is stored as a JSON array — ["all"] or a list of page templates.
+  const _pages: string[] = (() => {
+    try { return JSON.parse(campaign.popupPages ?? '["all"]'); } catch { return ["all"]; }
+  })();
+  const [popupPageScope, setPopupPageScope] = useState<string>(_pages.includes("all") ? "all" : "specific");
   const [popupPageTypes, setPopupPageTypes] = useState<string[]>(
-    _rawPages === "all"
-      ? []
-      : (() => { try { return JSON.parse(_rawPages); } catch { return []; } })()
+    _pages.includes("all") ? [] : _pages
   );
 
   const [tiers, setTiers] = useState<any[]>(
@@ -3327,7 +3340,8 @@ export default function EditCampaign() {
       fd.append("popupHeading", popupHeading);
       fd.append("popupBody", popupBody);
       fd.append("popupButtonText", popupButtonText);
-      fd.append("popupPages", popupPageScope === "all" ? "all" : JSON.stringify(popupPageTypes));
+      fd.append("popupDelaySeconds", popupDelaySeconds);
+      fd.append("popupPages", JSON.stringify(popupPageScope === "all" ? ["all"] : popupPageTypes));
     }
     if (type === "quantity_discount")
       fd.append("tiers", JSON.stringify(tiers.map((t) => ({ ...t, discountType: tierDiscountType }))));
@@ -4176,6 +4190,15 @@ export default function EditCampaign() {
                             />
                           </div>
                         ))}
+                      </BlockStack>
+                      <BlockStack gap="100">
+                        <Text as="p" variant="bodyMd" fontWeight="medium">Show popup after</Text>
+                        <InlineStack gap="300" align="start" blockAlign="end">
+                          <div style={{ width: "120px" }}>
+                            <TextField label="" labelHidden value={popupDelaySeconds} onChange={setPopupDelaySeconds} type="number" min="0" suffix="seconds" autoComplete="off" />
+                          </div>
+                        </InlineStack>
+                        <Text as="p" variant="bodySm" tone="subdued">How long to wait after the page loads before the popup appears. Leave blank to use the delay set on the Discount popup app embed in your theme.</Text>
                       </BlockStack>
                       <BlockStack gap="100">
                         <Text as="p" variant="bodyMd" fontWeight="medium">Show popup again after the shopper closes it</Text>

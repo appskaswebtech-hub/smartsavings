@@ -965,6 +965,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const popupHeading = (formData.get("popupHeading") as string) || null;
   const popupDescription = (formData.get("popupDescription") as string) || null;
   const popupButtonText = (formData.get("popupButtonText") as string) || null;
+  // Left blank means "use the theme app-embed default", so keep it null — 0 is a
+  // real value (show immediately) and must stay distinguishable from unset.
+  const popupDelaySecondsRaw = ((formData.get("popupDelaySeconds") as string) || "").trim();
+  const popupDelaySeconds =
+    popupDelaySecondsRaw && !isNaN(parseInt(popupDelaySecondsRaw, 10))
+      ? Math.max(0, parseInt(popupDelaySecondsRaw, 10))
+      : null;
   const popupFrequencyValueRaw = formData.get("popupFrequencyValue") as string;
   const popupFrequencyValue =
     popupFrequencyValueRaw && !isNaN(parseInt(popupFrequencyValueRaw, 10))
@@ -1057,6 +1064,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         popupHeading: popupEnabled ? popupHeading : null,
         popupDescription: popupEnabled ? popupDescription : null,
         popupButtonText: popupEnabled ? popupButtonText : null,
+        popupDelaySeconds: popupEnabled ? popupDelaySeconds : null,
         popupFrequencyValue: popupEnabled ? popupFrequencyValue : null,
         popupFrequencyUnit: popupEnabled ? popupFrequencyUnit : null,
       },
@@ -1615,6 +1623,7 @@ export default function NewCampaign() {
     "Enter your email and we'll send your exclusive discount code straight to your inbox."
   );
   const [popupButtonText, setPopupButtonText] = useState("Email me the code");
+  const [popupDelaySeconds, setPopupDelaySeconds] = useState("");
   const [popupFrequencyValue, setPopupFrequencyValue] = useState("24");
   const [popupFrequencyUnit, setPopupFrequencyUnit] = useState("hours");
 
@@ -1778,6 +1787,7 @@ export default function NewCampaign() {
       formData.append("popupHeading", popupHeading);
       formData.append("popupDescription", popupDescription);
       formData.append("popupButtonText", popupButtonText);
+      formData.append("popupDelaySeconds", popupDelaySeconds);
       formData.append("popupFrequencyValue", popupFrequencyValue);
       formData.append("popupFrequencyUnit", popupFrequencyUnit);
     }
@@ -2366,6 +2376,29 @@ export default function NewCampaign() {
                           autoComplete="off"
                         />
                       </FormLayout>
+
+                      <BlockStack gap="200">
+                        <Text as="p" variant="bodySm" fontWeight="bold">
+                          Show popup after
+                        </Text>
+                        <InlineStack gap="200" blockAlign="end">
+                          <div style={{ width: "120px" }}>
+                            <TextField
+                              label=""
+                              type="number"
+                              min={0}
+                              suffix="seconds"
+                              value={popupDelaySeconds}
+                              onChange={setPositiveValue(setPopupDelaySeconds)}
+                              autoComplete="off"
+                            />
+                          </div>
+                        </InlineStack>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          How long to wait after the page loads before the popup appears. Leave
+                          blank to use the delay set on the Discount popup app embed in your theme.
+                        </Text>
+                      </BlockStack>
 
                       <BlockStack gap="200">
                         <Text as="p" variant="bodySm" fontWeight="bold">

@@ -17,6 +17,14 @@
     return pages.indexOf(template) !== -1;
   }
 
+  // How long to wait before showing the popup for the first time. The campaign
+  // setting wins when present; otherwise fall back to the theme app-embed delay.
+  function initialDelayMs(c) {
+    var v = parseInt(c.popupDelaySeconds, 10);
+    if (isNaN(v) || v < 0) return delaySec * 1000;
+    return v * 1000;
+  }
+
   // How long to wait before re-showing after a dismissal (default 24h)
   function frequencyMs(c) {
     var v = parseInt(c.popupFrequencyValue, 10);
@@ -60,7 +68,7 @@
         if (closedAt && Date.now() - closedAt < frequencyMs(campaign)) return; // re-show window
       } catch (e) {}
 
-      setTimeout(function () { renderPopup(campaign, storageKey, closedKey, style); }, delaySec * 1000);
+      setTimeout(function () { renderPopup(campaign, storageKey, closedKey, style); }, initialDelayMs(campaign));
     })
     .catch(function () {});
 

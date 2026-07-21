@@ -758,3 +758,111 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
     return { success: false, errors: [String(error)], createdIds: [] };
   }
 }
+
+// Code discounts and automatic discounts are deleted by different mutations, so
+// every id has to be classified before it can be removed. Ids reach us from two
+// places with no type information attached: mutation payloads (which carry the
+// concrete node type in the gid) and the discountNodes query (which does not).
+async function resolveDiscountKinds(
+  admin: AdminApiContext,
+  ids: string[]
+): Promise<Record<string, "code" | "automatic">> {
+  const kinds: Record<string, "code" | "automatic"> = {};
+  const unknown: string[] = [];
+
+  for (const id of ids) {
+    if (id.includes("DiscountCodeNode")) kinds[id] = "code";
+    else if (id.includes("DiscountAutomaticNode")) kinds[id] = "automatic";
+    else unknown.push(id);
+  }
+
+  if (unknown.length === 0) return kinds;
+
+  // One batched lookup for everything the gid couldn't classify.
+  const res = await admin.graphql(
+    `#graphql
+    query discountKinds($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on DiscountNode {
+          id
+          discount { __typename }
+        }
+      }
+    }`,
+    { variables: { ids: unknown } }
+  );
+  const data: any = await res.json();
+  const nodes = data?.data?.nodes || [];
+
+  for (const node of nodes) {
+    if (!node?.id) continue;
+    kinds[node.id] = (node.discount?.__typename || "").includes("Code")
+      ? "code"
+      : "automatic";
+  }
+
+  // Anything the lookup couldn't resolve falls back to automatic — every
+  // campaign type except advanced_discount_code creates automatic discounts.
+  for (const id of unknown) {
+    if (!kinds[id]) kinds[id] = "automatic";
+  }
+
+  return kinds;
+}
+
+// Deletes the given Shopify discounts and returns a list of error messages —
+// empty when every deletion succeeded. Errors are returned rather than thrown
+// because callers treat the return value as the error channel and accumulate
+// these alongside their own failures.
+export async function deleteShopifyDiscountsByIds(
+  admin: AdminApiContext,
+  ids: string[]
+): Promise<string[]> {
+  // createShopifyDiscount pushes the mutation's node id without checking it
+  // exists, so createdIds can legitimately contain undefined entries.
+  const targets = (ids || []).filter(Boolean);
+  if (targets.length === 0) return [];
+
+  const errors: string[] = [];
+
+  try {
+    const kinds = await resolveDiscountKinds(admin, targets);
+
+    for (const id of targets) {
+      const result = kinds[id] === "code"
+        ? await runMutation(admin,
+            `#graphql
+            mutation del($id: ID!) {
+              discountCodeDelete(id: $id) {
+                deletedCodeDiscountId
+                userErrors { field message }
+              }
+            }`,
+            { id }
+          )
+        : await runMutation(admin,
+            `#graphql
+            mutation del($id: ID!) {
+              discountAutomaticDelete(id: $id) {
+                deletedAutomaticDiscountId
+                userErrors { field message }
+              }
+            }`,
+            { id }
+          );
+
+      const ue =
+        result.data?.discountCodeDelete?.userErrors ||
+        result.data?.discountAutomaticDelete?.userErrors ||
+        [];
+      if (ue.length) {
+        errors.push(...ue.map((e: any) => `Failed to delete ${id}: ${e.message}`));
+      }
+    }
+  } catch (error) {
+    console.error("deleteShopifyDiscountsByIds error:", error);
+    errors.push(String(error));
+  }
+
+  return errors;
+}

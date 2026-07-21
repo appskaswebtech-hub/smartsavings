@@ -164,6 +164,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         popupHeading: c.popupHeading,
         popupDescription: c.popupDescription,
         popupButtonText: c.popupButtonText,
+        popupDelaySeconds: c.popupDelaySeconds,
         popupFrequencyValue: c.popupFrequencyValue,
         popupFrequencyUnit: c.popupFrequencyUnit,
       };
@@ -205,11 +206,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     if (contentType.includes("application/json")) {
       const body = await request.json();
-      email = (body.email || "").toString().trim();
+      email = (body.email || "").toString().trim().toLowerCase();
       campaignId = (body.campaignId || "").toString().trim();
     } else {
       const form = await request.formData();
-      email = ((form.get("email") as string) || "").trim();
+      email = ((form.get("email") as string) || "").trim().toLowerCase();
       campaignId = ((form.get("campaignId") as string) || "").trim();
     }
   } catch {
