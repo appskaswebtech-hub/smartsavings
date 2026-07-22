@@ -863,7 +863,7 @@ import {
   type LoaderFunctionArgs,
   type ActionFunctionArgs,
 } from "@remix-run/node";
-import { useLoaderData, useNavigate, useSubmit, useActionData } from "@remix-run/react";
+import { useLoaderData, useNavigate, useSubmit, useActionData, useNavigation } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -888,6 +888,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { createShopifyDiscount } from "../discount.server";
+import { validateTiers, validateCartGoalTiers } from "../lib/validateTiers";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   bulk_price: "Bulk price editor",
@@ -953,7 +954,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const tiers = formData.get("tiers") as string;
   const freeShipping = formData.get("freeShipping") === "true";
   const minOrderForShipping = formData.get("minOrderForShipping") as string;
+  const minQuantityForShipping = formData.get("minQuantityForShipping") as string;
+  const requirementType = (formData.get("requirementType") as string) || "amount";
   const geoTarget = formData.get("geoTarget") as string;
+  // Persist only the minimum(s) the chosen mode uses, so a stale value from a
+  // hidden field can't leak into the stored campaign.
+  const storedMinAmount =
+    requirementType === "quantity" ? null : minOrderForShipping ? parseFloat(minOrderForShipping) : null;
+  const storedMinQty =
+    requirementType === "amount" ? null : minQuantityForShipping ? parseInt(minQuantityForShipping, 10) : null;
   const productIds = formData.get("productIds") as string;
   const variantIds = formData.get("variantIds") as string;
   const collectionIds = formData.get("collectionIds") as string;
@@ -1033,6 +1042,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       collectionIds: collectionIds || null,
       freeShipping,
       minOrderForShipping: minOrderForShipping || null,
+      minQuantityForShipping: minQuantityForShipping || null,
+      requirementType,
       discountCode: discountCode || null,
       geoTarget: geoTarget || null,
     });
@@ -1054,7 +1065,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         startDate: campaignStartDate,
         endDate: campaignEndDate,
         tiers: tiers || null,
-        minimumAmount: minOrderForShipping ? parseFloat(minOrderForShipping) : null,
+        minimumAmount: storedMinAmount,
+        minimumQuantity: storedMinQty,
+        requirementType,
         geoTarget: geoTarget || null,
         productIds: productIds || null,
         collectionIds: collectionIds || null,
@@ -1295,7 +1308,7 @@ function DiscountPreview({
   discountType: string;
   discountValue: string;
   tiers: { quantity: string; discount: string }[];
-  cartTiers: { amount: string; discount: string }[];
+  cartTiers: { requirementType?: string; amount: string; quantity?: string; discount: string }[];
   tierDiscountType: "percentage" | "fixed_amount";
   cartTierDiscountType: "percentage" | "fixed_amount";
   freeShipping: boolean;
@@ -1317,13 +1330,25 @@ function DiscountPreview({
     return match ? match.discount : 0;
   };
 
-  const getCartGoalDiscount = (totalAmount: number) => {
-    const validTiers = cartTiers
-      .map(t => ({ amount: parseFloat(t.amount), discount: parseFloat(t.discount) }))
-      .filter(t => t.amount > 0 && t.discount > 0)
-      .sort((a, b) => b.amount - a.amount);
-    const match = validTiers.find(t => totalAmount >= t.amount);
-    return match ? match.discount : 0;
+  // Does a cart-goal tier's requirement pass for a given cart amount + item count?
+  const cartTierMet = (t: any, totalAmount: number, qty: number) => {
+    const amt = parseFloat(t.amount);
+    const q = parseInt(t.quantity, 10);
+    const amountOk = amt > 0 && totalAmount >= amt;
+    const qtyOk = q > 0 && qty >= q;
+    switch (t.requirementType) {
+      case "quantity": return qtyOk;
+      case "both": return amountOk && qtyOk;
+      case "either": return amountOk || qtyOk;
+      default: return amountOk; // amount
+    }
+  };
+
+  const getCartGoalDiscount = (totalAmount: number, qty: number) => {
+    const matches = cartTiers
+      .filter(t => parseFloat(t.discount) > 0 && cartTierMet(t, totalAmount, qty))
+      .map(t => parseFloat(t.discount));
+    return matches.length ? Math.max(...matches) : 0;
   };
 
   // Tiers that are actually offers. Numeric comparison, not truthiness: these
@@ -1332,9 +1357,29 @@ function DiscountPreview({
   const liveTiers = tiers.filter(
     (t) => parseFloat(t.quantity) > 0 && parseFloat(t.discount) > 0
   );
-  const liveCartTiers = cartTiers.filter(
-    (t) => parseFloat(t.amount) > 0 && parseFloat(t.discount) > 0
-  );
+  const liveCartTiers = cartTiers.filter((t) => {
+    if (!(parseFloat(t.discount) > 0)) return false;
+    const hasAmount = parseFloat(t.amount) > 0;
+    const hasQty = parseInt(t.quantity ?? "", 10) > 0;
+    switch (t.requirementType) {
+      case "quantity": return hasQty;
+      case "both": return hasAmount && hasQty;
+      case "either": return hasAmount || hasQty;
+      default: return hasAmount;
+    }
+  });
+
+  // "Spend $X+" / "Buy Y+ items" / combined, per the tier's requirement type.
+  const cartTierThreshold = (t: any) => {
+    const amt = `Spend $${t.amount}+`;
+    const qty = `Buy ${t.quantity}+ items`;
+    switch (t.requirementType) {
+      case "quantity": return qty;
+      case "both": return `${amt} and ${qty}`;
+      case "either": return `${amt} or ${qty}`;
+      default: return amt;
+    }
+  };
 
   // "Save 5%" vs "Save $5" — one string, so <Badge> gets a single child.
   const tierLabel = (v: string, dt: "percentage" | "fixed_amount") =>
@@ -1370,7 +1415,7 @@ function DiscountPreview({
       discountAmount = cartTotal * (activeTierValue / 100);
     }
   } else if (type === "cart_goal") {
-    activeTierValue = getCartGoalDiscount(cartTotal);
+    activeTierValue = getCartGoalDiscount(cartTotal, cartQty);
     if (cartTierDiscountType === "fixed_amount") {
       // Cart goal always targets all items, so it never applies per item.
       discountAmount = activeTierValue;
@@ -1437,7 +1482,7 @@ function DiscountPreview({
                   <Text as="p" variant="bodySm" fontWeight="bold">Spend more, Save more!</Text>
                   {liveCartTiers.map((tier, i) => (
                     <InlineStack key={i} align="space-between">
-                      <Text as="span" variant="bodySm">Spend ${tier.amount}+</Text>
+                      <Text as="span" variant="bodySm">{cartTierThreshold(tier)}</Text>
                       <Badge tone="success">{tierLabel(tier.discount, cartTierDiscountType)}</Badge>
                     </InlineStack>
                   ))}
@@ -1534,7 +1579,7 @@ function DiscountPreview({
                 {type === "cart_goal" && activeTierValue === 0 && liveCartTiers.length > 0 && (
                   <Box padding="200" background="bg-surface-warning" borderRadius="200">
                     <Text as="p" variant="bodySm" tone="caution" alignment="center">
-                      Spend ${(parseFloat(liveCartTiers[0]?.amount || "50") - cartTotal).toFixed(2)} more to unlock {offLabel(liveCartTiers[0]?.discount ?? "", cartTierDiscountType)}
+                      {cartTierThreshold(liveCartTiers[0])} to unlock {offLabel(liveCartTiers[0]?.discount ?? "", cartTierDiscountType)}
                     </Text>
                   </Box>
                 )}
@@ -1625,6 +1670,10 @@ export default function NewCampaign() {
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const submit = useSubmit();
+  // Drives the Save button's spinner. "submitting" is true only while the action
+  // runs — a plain Discard navigation is a GET ("loading"), so it won't trigger it.
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
 
   const [name, setName] = useState("");
   const [discountType, setDiscountType] = useState("percentage");
@@ -1644,13 +1693,17 @@ export default function NewCampaign() {
     { quantity: "4", discount: "10" },
     { quantity: "8", discount: "15" },
   ]);
+  // Each cart-goal tier carries its own requirementType + both possible thresholds.
   const [cartTiers, setCartTiers] = useState([
-    { amount: "50", discount: "5" },
-    { amount: "100", discount: "10" },
-    { amount: "150", discount: "15" },
+    { requirementType: "amount", amount: "50", quantity: "", discount: "5" },
+    { requirementType: "amount", amount: "100", quantity: "", discount: "10" },
+    { requirementType: "amount", amount: "150", quantity: "", discount: "15" },
   ]);
   const [freeShipping, setFreeShipping] = useState(true);
   const [minOrderForShipping, setMinOrderForShipping] = useState("100");
+  // amount | quantity | both | either — which minimum(s) gate the free shipping.
+  const [requirementType, setRequirementType] = useState("amount");
+  const [minQuantityForShipping, setMinQuantityForShipping] = useState("");
   const [geoTarget, setGeoTarget] = useState("");
   const [discountCode, setDiscountCode] = useState("");
 
@@ -1684,8 +1737,12 @@ export default function NewCampaign() {
     const n = [...tiers]; n[index][field] = value; setTiers(n);
   };
 
-  const updateCartTier = (index: number, field: "amount" | "discount", value: string) => {
-    if (value !== "" && parseFloat(value) < 0) return;
+  const updateCartTier = (
+    index: number,
+    field: "amount" | "quantity" | "discount" | "requirementType",
+    value: string
+  ) => {
+    if (field !== "requirementType" && value !== "" && parseFloat(value) < 0) return;
     const n = [...cartTiers]; n[index][field] = value; setCartTiers(n);
   };
 
@@ -1786,12 +1843,51 @@ export default function NewCampaign() {
       return;
     }
 
+    // Shipping: the field(s) the chosen requirement type needs must be filled.
+    if (type === "shipping_discount") {
+      const needsAmount = ["amount", "both", "either"].includes(requirementType);
+      const needsQty = ["quantity", "both", "either"].includes(requirementType);
+      const amountOk = parseFloat(minOrderForShipping) > 0;
+      const qtyOk = parseInt(minQuantityForShipping, 10) > 0;
+      // "either" only needs one of the two; the rest need every field they show.
+      const ok =
+        requirementType === "either"
+          ? amountOk || qtyOk
+          : (!needsAmount || amountOk) && (!needsQty || qtyOk);
+      if (!ok) {
+        shopify.toast.show(
+          requirementType === "either"
+            ? "Enter a minimum order value or a minimum quantity."
+            : "Enter a value for each minimum requirement.",
+          { isError: true }
+        );
+        return;
+      }
+    }
+
     // Popup requires at least one target page when enabled
     if (type === "advanced_discount_code" && popupEnabled && popupPages.length === 0) {
       shopify.toast.show("Select at least one page to show the discount popup on.", {
         isError: true,
       });
       return;
+    }
+
+    // Tiered campaigns: at least 1 valid tier, no duplicate thresholds, <= 25 tiers.
+    if (type === "quantity_discount") {
+      const tierError = validateTiers(tiers, "quantity", "Buy quantity");
+      if (tierError) {
+        shopify.toast.show(tierError, { isError: true });
+        return;
+      }
+    }
+    // Cart goal tiers each pick their own requirement type (amount/quantity/both/either).
+    if (type === "cart_goal") {
+      const tierError = validateCartGoalTiers(cartTiers);
+      if (tierError) {
+        shopify.toast.show(tierError, { isError: true });
+        return;
+      }
     }
 
     // Collect variant IDs for products that have a specific variant selection
@@ -1816,6 +1912,8 @@ export default function NewCampaign() {
     formData.append("endDate", endDate);
     formData.append("freeShipping", String(freeShipping));
     formData.append("minOrderForShipping", minOrderForShipping);
+    formData.append("minQuantityForShipping", minQuantityForShipping);
+    formData.append("requirementType", requirementType);
     formData.append("geoTarget", geoTarget);
     formData.append("discountCode", discountCode);
 
@@ -1862,7 +1960,12 @@ export default function NewCampaign() {
     <Page
       backAction={{ content: "Choose campaign type", url: "/app/campaigns/create" }}
       title={`Create ${CAMPAIGN_TYPE_LABELS[type] || "Campaign"}`}
-      primaryAction={{ content: "Save campaign", onAction: handleSave }}
+      primaryAction={{
+        content: "Save campaign",
+        onAction: handleSave,
+        loading: isSubmitting,
+        disabled: isSubmitting,
+      }}
       secondaryActions={[{ content: "Discard", onAction: () => navigate("/app/campaigns") }]}
     >
       {actionData && !actionData.success && (
@@ -2109,45 +2212,93 @@ export default function NewCampaign() {
                       value={cartTierDiscountType}
                       onChange={(v) => setCartTierDiscountType(v as "percentage" | "fixed_amount")}
                     />
-                    {cartTiers.map((tier, i) => (
-                      <InlineStack key={i} gap="200" blockAlign="end">
-                        <div style={{ flex: 1 }}>
-                          <TextField
-                            label={i === 0 ? "Min cart value" : ""}
-                            type="number"
-                            min={0}
-                            value={tier.amount}
-                            onChange={(v) => updateCartTier(i, "amount", v)}
-                            autoComplete="off"
-                            prefix="$"
-                          />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <TextField
-                            label={i === 0 ? "Discount" : ""}
-                            type="number"
-                            min={0}
-                            value={tier.discount}
-                            onChange={(v) => updateCartTier(i, "discount", v)}
-                            autoComplete="off"
-                            prefix={cartTierDiscountType === "fixed_amount" ? "Save $" : "Save"}
-                            suffix={cartTierDiscountType === "fixed_amount" ? undefined : "%"}
-                          />
-                        </div>
-                        <Button
-                          tone="critical"
-                          size="slim"
-                          onClick={() => setCartTiers(cartTiers.filter((_, j) => j !== i))}
-                          disabled={cartTiers.length <= 1}
-                        >
-                          Remove
-                        </Button>
-                      </InlineStack>
-                    ))}
+                    {cartTiers.map((tier, i) => {
+                      const showAmount = ["amount", "both", "either"].includes(tier.requirementType);
+                      const showQty = ["quantity", "both", "either"].includes(tier.requirementType);
+                      return (
+                        <Box key={i} padding="300" borderColor="border" borderWidth="025" borderRadius="200">
+                          <BlockStack gap="200">
+                            <InlineStack gap="200" align="space-between" blockAlign="center">
+                              <Text as="span" variant="bodySm" fontWeight="medium">Tier {i + 1}</Text>
+                              <Button
+                                tone="critical"
+                                size="slim"
+                                onClick={() => setCartTiers(cartTiers.filter((_, j) => j !== i))}
+                                disabled={cartTiers.length <= 1}
+                              >
+                                Remove
+                              </Button>
+                            </InlineStack>
+                            <Select
+                              label="Requirement"
+                              labelHidden
+                              options={[
+                                { label: "Minimum order value", value: "amount" },
+                                { label: "Minimum quantity", value: "quantity" },
+                                { label: "Minimum order value and minimum quantity", value: "both" },
+                                { label: "Minimum order value or minimum quantity", value: "either" },
+                              ]}
+                              value={tier.requirementType}
+                              onChange={(v) => updateCartTier(i, "requirementType", v)}
+                              helpText={
+                                tier.requirementType === "both"
+                                  ? "Shopify enforces the order value at checkout; the quantity is shown to shoppers but not yet enforced for “and”."
+                                  : undefined
+                              }
+                            />
+                            <InlineStack gap="200" blockAlign="end">
+                              {showAmount && (
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Min order value"
+                                    type="number"
+                                    min={0}
+                                    value={tier.amount}
+                                    onChange={(v) => updateCartTier(i, "amount", v)}
+                                    autoComplete="off"
+                                    prefix="$"
+                                  />
+                                </div>
+                              )}
+                              {showQty && (
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Min quantity"
+                                    type="number"
+                                    min={1}
+                                    value={tier.quantity}
+                                    onChange={(v) => updateCartTier(i, "quantity", v)}
+                                    autoComplete="off"
+                                    suffix="items"
+                                  />
+                                </div>
+                              )}
+                              <div style={{ flex: 1 }}>
+                                <TextField
+                                  label="Discount"
+                                  type="number"
+                                  min={0}
+                                  value={tier.discount}
+                                  onChange={(v) => updateCartTier(i, "discount", v)}
+                                  autoComplete="off"
+                                  prefix={cartTierDiscountType === "fixed_amount" ? "Save $" : "Save"}
+                                  suffix={cartTierDiscountType === "fixed_amount" ? undefined : "%"}
+                                />
+                              </div>
+                            </InlineStack>
+                          </BlockStack>
+                        </Box>
+                      );
+                    })}
                     <div>
                       <Button
                         size="slim"
-                        onClick={() => setCartTiers([...cartTiers, { amount: "", discount: "" }])}
+                        onClick={() =>
+                          setCartTiers([
+                            ...cartTiers,
+                            { requirementType: "amount", amount: "", quantity: "", discount: "" },
+                          ])
+                        }
                       >
                         Add tier
                       </Button>
@@ -2169,16 +2320,53 @@ export default function NewCampaign() {
                         prefix="$"
                       />
                     )}
-                    <TextField
-                      label="Minimum order value"
-                      type="number"
-                      min={0}
-                      value={minOrderForShipping}
-                      onChange={setPositiveValue(setMinOrderForShipping)}
-                      autoComplete="off"
-                      prefix="$"
-                      placeholder="e.g. 100"
+                    <Select
+                      label="Minimum requirement"
+                      options={[
+                        { label: "Minimum order value", value: "amount" },
+                        { label: "Minimum quantity", value: "quantity" },
+                        { label: "Minimum order value and minimum quantity", value: "both" },
+                        { label: "Minimum order value or minimum quantity", value: "either" },
+                      ]}
+                      value={requirementType}
+                      onChange={setRequirementType}
+                      helpText={
+                        requirementType === "both"
+                          ? "Shopify enforces the order value at checkout; the quantity is shown to shoppers but not yet enforced for “and”."
+                          : undefined
+                      }
                     />
+                    {(requirementType === "amount" ||
+                      requirementType === "both" ||
+                      requirementType === "either") && (
+                      <TextField
+                        label="Minimum order value"
+                        type="number"
+                        min={0}
+                        value={minOrderForShipping}
+                        onChange={setPositiveValue(setMinOrderForShipping)}
+                        autoComplete="off"
+                        prefix="$"
+                        placeholder="e.g. 100"
+                      />
+                    )}
+                    {(requirementType === "quantity" ||
+                      requirementType === "both" ||
+                      requirementType === "either") && (
+                      <TextField
+                        label="Minimum quantity"
+                        type="number"
+                        min={1}
+                        value={minQuantityForShipping}
+                        onChange={(v) => {
+                          const n = parseInt(v);
+                          if (v === "" || n >= 0) setMinQuantityForShipping(v);
+                        }}
+                        autoComplete="off"
+                        suffix="items"
+                        placeholder="e.g. 3"
+                      />
+                    )}
                     {freeShipping && (
                       <Select
                         label="Where does free shipping apply?"

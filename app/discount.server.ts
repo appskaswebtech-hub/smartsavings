@@ -319,6 +319,8 @@ interface CampaignData {
   collectionIds: string | null;
   freeShipping: boolean;
   minOrderForShipping: string | null;
+  minQuantityForShipping?: string | null;
+  requirementType?: string | null; // amount | quantity | both | either (shipping_discount)
   discountCode: string | null;
   geoTarget: string | null;
 }
@@ -632,16 +634,37 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
     }
 
     // ─── CART GOAL ───
+    // Each tier carries its own requirementType (amount | quantity | both | either).
+    // Same Shopify one-of constraint as shipping: a single automatic discount can
+    // require subtotal OR quantity, never both. So per tier:
+    //   amount    → 1 discount, subtotal minimum
+    //   quantity  → 1 discount, quantity minimum
+    //   either    → 2 discounts (subtotal + quantity)
+    //   both      → 1 discount, subtotal minimum (quantity display-only — native
+    //               can't AND two requirement types; the Function would be needed)
     else if (campaign.type === "cart_goal" && campaign.tiers) {
       const tiers = JSON.parse(campaign.tiers)
         .map((t: any) => ({
+          requirementType: ["amount", "quantity", "both", "either"].includes(t.requirementType)
+            ? t.requirementType
+            : "amount",
           amount: parseFloat(t.amount),
+          quantity: parseInt(t.quantity, 10),
           discount: parseFloat(t.discount),
           discountType: t.discountType === "fixed_amount" ? "fixed_amount" : "percentage",
         }))
-        // Same as the quantity branch: zero placeholders stay saved but aren't sent.
-        .filter((t: any) => !isNaN(t.amount) && !isNaN(t.discount) && t.amount > 0 && t.discount > 0)
-        .sort((a: any, b: any) => a.amount - b.amount);
+        // Zero placeholders stay saved but aren't sent. A tier needs a discount plus
+        // whichever threshold(s) its requirement type gates on.
+        .filter((t: any) => {
+          if (isNaN(t.discount) || t.discount <= 0) return false;
+          const hasAmount = !isNaN(t.amount) && t.amount > 0;
+          const hasQty = !isNaN(t.quantity) && t.quantity > 0;
+          if (t.requirementType === "quantity") return hasQty;
+          if (t.requirementType === "both") return hasAmount && hasQty;
+          if (t.requirementType === "either") return hasAmount || hasQty;
+          return hasAmount; // amount
+        })
+        .sort((a: any, b: any) => (a.amount || 0) - (b.amount || 0) || (a.quantity || 0) - (b.quantity || 0));
 
       for (const tier of tiers) {
         const isFixed = tier.discountType === "fixed_amount";
@@ -649,29 +672,49 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
         const tierValue = isFixed
           ? { discountAmount: { amount: String(tier.discount), appliesOnEachItem: false } }
           : { percentage: tier.discount / 100 };
-        const tierLabel = isFixed ? `Save $${tier.discount}` : `Save ${tier.discount}%`;
+        const valueLabel = isFixed ? `Save $${tier.discount}` : `Save ${tier.discount}%`;
 
-        const result = await runMutation(admin,
-          `#graphql
-          mutation create($discount: DiscountAutomaticBasicInput!) {
-            discountAutomaticBasicCreate(automaticBasicDiscount: $discount) {
-              automaticDiscountNode { id }
-              userErrors { field message }
+        const hasAmount = !isNaN(tier.amount) && tier.amount > 0;
+        const hasQty = !isNaN(tier.quantity) && tier.quantity > 0;
+        const amountSpec = {
+          title: `${campaign.name} (Spend $${tier.amount}+ ${valueLabel})`,
+          minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: String(tier.amount) } },
+        };
+        const qtySpec = {
+          title: `${campaign.name} (Buy ${tier.quantity}+ ${valueLabel})`,
+          minimumRequirement: { quantity: { greaterThanOrEqualToQuantity: String(tier.quantity) } },
+        };
+
+        const specs: { title: string; minimumRequirement: any }[] = [];
+        if (tier.requirementType === "quantity") specs.push(qtySpec);
+        else if (tier.requirementType === "either") {
+          if (hasAmount) specs.push(amountSpec);
+          if (hasQty) specs.push(qtySpec);
+        } else specs.push(amountSpec); // amount and both gate on subtotal
+
+        for (const spec of specs) {
+          const result = await runMutation(admin,
+            `#graphql
+            mutation create($discount: DiscountAutomaticBasicInput!) {
+              discountAutomaticBasicCreate(automaticBasicDiscount: $discount) {
+                automaticDiscountNode { id }
+                userErrors { field message }
+              }
+            }`,
+            {
+              discount: {
+                title: spec.title,
+                startsAt, endsAt,
+                minimumRequirement: spec.minimumRequirement,
+                customerGets: { value: tierValue, items: { all: true } },
+                combinesWith: { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true },
+              },
             }
-          }`,
-          {
-            discount: {
-              title: `${campaign.name} (Spend $${tier.amount}+ ${tierLabel})`,
-              startsAt, endsAt,
-              minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: String(tier.amount) } },
-              customerGets: { value: tierValue, items: { all: true } },
-              combinesWith: { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true },
-            },
-          }
-        );
-        const ue = result.data?.discountAutomaticBasicCreate?.userErrors || [];
-        if (ue.length) errors.push(...ue.map((e: any) => `$${tier.amount}+: ${e.message}`));
-        else createdIds.push(result.data?.discountAutomaticBasicCreate?.automaticDiscountNode?.id);
+          );
+          const ue = result.data?.discountAutomaticBasicCreate?.userErrors || [];
+          if (ue.length) errors.push(...ue.map((e: any) => `${spec.title}: ${e.message}`));
+          else createdIds.push(result.data?.discountAutomaticBasicCreate?.automaticDiscountNode?.id);
+        }
       }
     }
 
@@ -684,33 +727,63 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
         const id = await createSpecificFreeShipping(admin, campaign, startsAt, endsAt, errors);
         if (id) createdIds.push(id);
       } else {
-        // All-products path — unchanged from before
-        const minReq = campaign.minOrderForShipping
-          ? { subtotal: { greaterThanOrEqualToSubtotal: campaign.minOrderForShipping } }
-          : null;
-
+        // All-products path. Shopify's free-shipping minimumRequirement is one-of
+        // (subtotal OR quantity), so requirementType maps to how many discounts we
+        // create:
+        //   amount    → 1 discount, subtotal minimum
+        //   quantity  → 1 discount, quantity minimum
+        //   either    → 2 discounts (subtotal + quantity); meeting either qualifies
+        //   both      → 1 discount, subtotal minimum (native discounts can't AND two
+        //               requirement types — the quantity leg is display-only until the
+        //               free-shipping Function enforces it; see createSpecificFreeShipping)
         const destination = await buildShippingDestination(admin, campaign.geoTarget, errors);
 
         if (destination) {
-          const result = await runMutation(admin,
-            `#graphql
-            mutation create($discount: DiscountAutomaticFreeShippingInput!) {
-              discountAutomaticFreeShippingCreate(freeShippingAutomaticDiscount: $discount) {
-                automaticDiscountNode { id }
-                userErrors { field message }
+          const reqType = campaign.requirementType || "amount";
+          const hasAmount = !!campaign.minOrderForShipping && parseFloat(campaign.minOrderForShipping) > 0;
+          const hasQty = !!campaign.minQuantityForShipping && parseInt(campaign.minQuantityForShipping, 10) > 0;
+
+          const subtotalReq = { subtotal: { greaterThanOrEqualToSubtotal: campaign.minOrderForShipping } };
+          const quantityReq = { quantity: { greaterThanOrEqualToQuantity: String(campaign.minQuantityForShipping) } };
+
+          // Each entry becomes one discount. Distinct titles avoid the "title must be
+          // unique" error and still match findMatchingDiscountIds' prefix rule so
+          // edit/delete cleans up every one.
+          const toCreate: { title: string; minimumRequirement?: any }[] = [];
+          if (reqType === "quantity") {
+            toCreate.push({ title: campaign.name, ...(hasQty ? { minimumRequirement: quantityReq } : {}) });
+          } else if (reqType === "either") {
+            if (hasAmount) toCreate.push({ title: campaign.name, minimumRequirement: subtotalReq });
+            if (hasQty) toCreate.push({ title: `${campaign.name} (min items)`, minimumRequirement: quantityReq });
+            // If neither threshold is set, "either" is meaningless — fall back to an
+            // unconditional free-shipping discount so the campaign still does something.
+            if (!hasAmount && !hasQty) toCreate.push({ title: campaign.name });
+          } else {
+            // amount and both: gate on the order-value subtotal.
+            toCreate.push({ title: campaign.name, ...(hasAmount ? { minimumRequirement: subtotalReq } : {}) });
+          }
+
+          for (const spec of toCreate) {
+            const result = await runMutation(admin,
+              `#graphql
+              mutation create($discount: DiscountAutomaticFreeShippingInput!) {
+                discountAutomaticFreeShippingCreate(freeShippingAutomaticDiscount: $discount) {
+                  automaticDiscountNode { id }
+                  userErrors { field message }
+                }
+              }`,
+              {
+                discount: {
+                  title: spec.title, startsAt, endsAt,
+                  ...(spec.minimumRequirement ? { minimumRequirement: spec.minimumRequirement } : {}),
+                  destination,
+                },
               }
-            }`,
-            {
-              discount: {
-                title: campaign.name, startsAt, endsAt,
-                ...(minReq ? { minimumRequirement: minReq } : {}),
-                destination,
-              },
-            }
-          );
-          const ue = result.data?.discountAutomaticFreeShippingCreate?.userErrors || [];
-          if (ue.length) errors.push(...ue.map((e: any) => e.message));
-          else createdIds.push(result.data?.discountAutomaticFreeShippingCreate?.automaticDiscountNode?.id);
+            );
+            const ue = result.data?.discountAutomaticFreeShippingCreate?.userErrors || [];
+            if (ue.length) errors.push(...ue.map((e: any) => e.message));
+            else createdIds.push(result.data?.discountAutomaticFreeShippingCreate?.automaticDiscountNode?.id);
+          }
         }
       }
     }

@@ -2607,6 +2607,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { createShopifyDiscount, deleteShopifyDiscountsByIds } from "../discount.server";
+import { validateTiers, validateCartGoalTiers } from "../lib/validateTiers";
 import type { AdminApiContext } from "@shopify/shopify-app-remix/server";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
@@ -3170,14 +3171,18 @@ export default function EditCampaign() {
   const [cartTiers, setCartTiers] = useState<any[]>(
     type === "cart_goal" && loadedTiers.length > 0
       ? loadedTiers.map((t: any) => ({
+          requirementType: ["amount", "quantity", "both", "either"].includes(t.requirementType)
+            ? t.requirementType
+            : "amount",
           amount: String(t.amount || t.spend || ""),
+          quantity: t.quantity != null ? String(t.quantity) : "",
           discount: String(t.discount || ""),
           discountType: t.discountType || initTierDT,
         }))
       : [
-          { amount: "50", discount: "5", discountType: "percentage" },
-          { amount: "100", discount: "10", discountType: "percentage" },
-          { amount: "150", discount: "15", discountType: "percentage" },
+          { requirementType: "amount", amount: "50", quantity: "", discount: "5", discountType: "percentage" },
+          { requirementType: "amount", amount: "100", quantity: "", discount: "10", discountType: "percentage" },
+          { requirementType: "amount", amount: "150", quantity: "", discount: "15", discountType: "percentage" },
         ]
   );
   const [cartTierDiscountType, setCartTierDiscountType] = useState<
@@ -3299,20 +3304,23 @@ export default function EditCampaign() {
       return;
     }
 
-    if (type === "quantity_discount" && duplicateTierQtys.size > 0) {
-      shopify.toast.show(
-        "Each tier must have a unique minimum quantity.",
-        { isError: true }
-      );
-      return;
+    // Tiered campaigns: at least 1 valid tier, no duplicate thresholds, <= 25 tiers.
+    // (duplicateTierQtys drives the quantity-tier inline highlighting; the validators
+    // are the save gate and add the count/min rules.)
+    if (type === "quantity_discount") {
+      const tierError = validateTiers(tiers, "quantity", "Buy quantity");
+      if (tierError) {
+        shopify.toast.show(tierError, { isError: true });
+        return;
+      }
     }
-
-    if (type === "cart_goal" && duplicateCartAmounts.size > 0) {
-      shopify.toast.show(
-        "Each cart goal tier must have a unique spend amount.",
-        { isError: true }
-      );
-      return;
+    // Cart goal tiers each pick their own requirement type (amount/quantity/both/either).
+    if (type === "cart_goal") {
+      const tierError = validateCartGoalTiers(cartTiers);
+      if (tierError) {
+        shopify.toast.show(tierError, { isError: true });
+        return;
+      }
     }
 
     const fd = new FormData();
@@ -3520,52 +3528,90 @@ export default function EditCampaign() {
                         setCartTiers((prev) => prev.map((tier) => ({ ...tier, discountType: t })));
                       }}
                     />
-                    {cartTiers.map((tier, i) => (
-                      <InlineStack key={i} gap="200" blockAlign="end">
-                        <div style={{ flex: 1 }}>
-                          <TextField
-                            label={i === 0 ? "Min cart value" : ""}
-                            type="number"
-                            min={0}
-                            value={tier.amount}
-                            onChange={(v) => updateCartTier(i, "amount", v)}
-                            autoComplete="off"
-                            prefix="$"
-                            error={
-                              tier.amount && duplicateCartAmounts.has(tier.amount)
-                                ? "Duplicate amount"
-                                : undefined
-                            }
-                          />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <TextField
-                            label={i === 0 ? "Discount" : ""}
-                            type="number"
-                            min={0}
-                            value={tier.discount}
-                            onChange={(v) => updateCartTier(i, "discount", v)}
-                            autoComplete="off"
-                            prefix={cartTierDiscountType === "fixed_amount" ? "Save $" : "Save"}
-                            suffix={cartTierDiscountType === "fixed_amount" ? undefined : "%"}
-                          />
-                        </div>
-                        <Button
-                          tone="critical"
-                          size="slim"
-                          onClick={() => setCartTiers(cartTiers.filter((_, j) => j !== i))}
-                          disabled={cartTiers.length <= 1}
-                        >
-                          Remove
-                        </Button>
-                      </InlineStack>
-                    ))}
+                    {cartTiers.map((tier, i) => {
+                      const showAmount = ["amount", "both", "either"].includes(tier.requirementType);
+                      const showQty = ["quantity", "both", "either"].includes(tier.requirementType);
+                      return (
+                        <Box key={i} padding="300" borderColor="border" borderWidth="025" borderRadius="200">
+                          <BlockStack gap="200">
+                            <InlineStack gap="200" align="space-between" blockAlign="center">
+                              <Text as="span" variant="bodySm" fontWeight="medium">Tier {i + 1}</Text>
+                              <Button
+                                tone="critical"
+                                size="slim"
+                                onClick={() => setCartTiers(cartTiers.filter((_, j) => j !== i))}
+                                disabled={cartTiers.length <= 1}
+                              >
+                                Remove
+                              </Button>
+                            </InlineStack>
+                            <Select
+                              label="Requirement"
+                              labelHidden
+                              options={[
+                                { label: "Minimum order value", value: "amount" },
+                                { label: "Minimum quantity", value: "quantity" },
+                                { label: "Minimum order value and minimum quantity", value: "both" },
+                                { label: "Minimum order value or minimum quantity", value: "either" },
+                              ]}
+                              value={tier.requirementType}
+                              onChange={(v) => updateCartTier(i, "requirementType", v)}
+                              helpText={
+                                tier.requirementType === "both"
+                                  ? "Shopify enforces the order value at checkout; the quantity is shown to shoppers but not yet enforced for “and”."
+                                  : undefined
+                              }
+                            />
+                            <InlineStack gap="200" blockAlign="end">
+                              {showAmount && (
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Min order value"
+                                    type="number"
+                                    min={0}
+                                    value={tier.amount}
+                                    onChange={(v) => updateCartTier(i, "amount", v)}
+                                    autoComplete="off"
+                                    prefix="$"
+                                  />
+                                </div>
+                              )}
+                              {showQty && (
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Min quantity"
+                                    type="number"
+                                    min={1}
+                                    value={tier.quantity}
+                                    onChange={(v) => updateCartTier(i, "quantity", v)}
+                                    autoComplete="off"
+                                    suffix="items"
+                                  />
+                                </div>
+                              )}
+                              <div style={{ flex: 1 }}>
+                                <TextField
+                                  label="Discount"
+                                  type="number"
+                                  min={0}
+                                  value={tier.discount}
+                                  onChange={(v) => updateCartTier(i, "discount", v)}
+                                  autoComplete="off"
+                                  prefix={cartTierDiscountType === "fixed_amount" ? "Save $" : "Save"}
+                                  suffix={cartTierDiscountType === "fixed_amount" ? undefined : "%"}
+                                />
+                              </div>
+                            </InlineStack>
+                          </BlockStack>
+                        </Box>
+                      );
+                    })}
                     <Button
                       size="slim"
                       onClick={() =>
                         setCartTiers([
                           ...cartTiers,
-                          { amount: "", discount: "", discountType: cartTierDiscountType },
+                          { requirementType: "amount", amount: "", quantity: "", discount: "", discountType: cartTierDiscountType },
                         ])
                       }
                     >
@@ -3675,13 +3721,18 @@ export default function EditCampaign() {
                     <Select
                       label="Minimum requirement"
                       options={[
-                        { label: "Minimum purchase amount ($)", value: "amount" },
-                        { label: "Minimum number of items", value: "quantity" },
-                        { label: "Both — amount AND quantity", value: "both" },
-                        { label: "Either — amount OR quantity", value: "either" },
+                        { label: "Minimum order value", value: "amount" },
+                        { label: "Minimum quantity", value: "quantity" },
+                        { label: "Minimum order value and minimum quantity", value: "both" },
+                        { label: "Minimum order value or minimum quantity", value: "either" },
                       ]}
                       value={requirementType}
                       onChange={setRequirementType}
+                      helpText={
+                        requirementType === "both"
+                          ? "Shopify enforces the order value at checkout; the quantity is shown to shoppers but not yet enforced for “and”."
+                          : undefined
+                      }
                     />
                     {(requirementType === "amount" ||
                       requirementType === "both" ||
