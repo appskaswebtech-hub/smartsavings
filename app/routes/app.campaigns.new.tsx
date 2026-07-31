@@ -884,6 +884,8 @@ import {
 } from "@shopify/polaris";
 import { ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
 import { useState } from "react";
+import { buildEmailHtml, discountLabel, newBlock, type EmailBlock } from "../lib/emailTemplate";
+import { EmailBlockEditor } from "../components/EmailBlockEditor";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -930,10 +932,10 @@ interface SelectedProduct {
 // ── Loader / Action ──────────────────────────────────────────
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const url = new URL(request.url);
   const type = url.searchParams.get("type") || "bulk_price";
-  return json({ type });
+  return json({ type, shop: session.shop });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -974,6 +976,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const popupHeading = (formData.get("popupHeading") as string) || null;
   const popupDescription = (formData.get("popupDescription") as string) || null;
   const popupButtonText = (formData.get("popupButtonText") as string) || null;
+  const emailContent = (formData.get("emailContent") as string) || null;
   // Left blank means "use the theme app-embed default", so keep it null — 0 is a
   // real value (show immediately) and must stay distinguishable from unset.
   const popupDelaySecondsRaw = ((formData.get("popupDelaySeconds") as string) || "").trim();
@@ -1077,6 +1080,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         popupHeading: popupEnabled ? popupHeading : null,
         popupDescription: popupEnabled ? popupDescription : null,
         popupButtonText: popupEnabled ? popupButtonText : null,
+        emailContent: popupEnabled ? emailContent : null,
         popupDelaySeconds: popupEnabled ? popupDelaySeconds : null,
         popupFrequencyValue: popupEnabled ? popupFrequencyValue : null,
         popupFrequencyUnit: popupEnabled ? popupFrequencyUnit : null,
@@ -1666,7 +1670,7 @@ function DiscountPreview({
 // ── Main Component ────────────────────────────────────────────
 
 export default function NewCampaign() {
-  const { type } = useLoaderData<typeof loader>();
+  const { type, shop } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -1715,6 +1719,20 @@ export default function NewCampaign() {
     "Enter your email and we'll send your exclusive discount code straight to your inbox."
   );
   const [popupButtonText, setPopupButtonText] = useState("Email me the code");
+  // Block-based content of the code email (separate from the on-site popup text above).
+  const [emailBlocks, setEmailBlocks] = useState<EmailBlock[]>(() => [
+    newBlock("heading"),
+    newBlock("text"),
+    newBlock("code"),
+    newBlock("button"),
+  ]);
+  // Live preview, built from the same template the sender uses.
+  const emailPreviewHtml = buildEmailHtml({
+    code: discountCode || "SAMPLE10",
+    discountLabel: discountLabel(discountType, parseFloat(discountValue) || null),
+    shop,
+    blocks: emailBlocks,
+  });
   const [popupDelaySeconds, setPopupDelaySeconds] = useState("");
   const [popupFrequencyValue, setPopupFrequencyValue] = useState("24");
   const [popupFrequencyUnit, setPopupFrequencyUnit] = useState("hours");
@@ -1927,6 +1945,7 @@ export default function NewCampaign() {
       formData.append("popupDelaySeconds", popupDelaySeconds);
       formData.append("popupFrequencyValue", popupFrequencyValue);
       formData.append("popupFrequencyUnit", popupFrequencyUnit);
+      formData.append("emailContent", JSON.stringify({ blocks: emailBlocks }));
     }
 
     if (selectedProducts.length > 0) {
@@ -2636,6 +2655,31 @@ export default function NewCampaign() {
                           autoComplete="off"
                         />
                       </FormLayout>
+
+                      <Divider />
+
+                      <BlockStack gap="200">
+                        <Text as="p" variant="bodySm" fontWeight="bold">
+                          Email content
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          The email a shopper receives with their code — separate from the popup text above. Build it from blocks.
+                        </Text>
+                        <EmailBlockEditor blocks={emailBlocks} onChange={setEmailBlocks} />
+                        <BlockStack gap="100">
+                          <Text as="p" variant="bodySm" fontWeight="bold">Preview</Text>
+                          <iframe
+                            title="Email preview"
+                            srcDoc={emailPreviewHtml}
+                            style={{
+                              width: "100%",
+                              height: "540px",
+                              border: "1px solid #e1e3e5",
+                              borderRadius: "8px",
+                            }}
+                          />
+                        </BlockStack>
+                      </BlockStack>
 
                       <BlockStack gap="200">
                         <Text as="p" variant="bodySm" fontWeight="bold">

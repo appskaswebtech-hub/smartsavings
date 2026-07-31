@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:dev.sqlite"
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 model Session {
@@ -41,9 +41,9 @@ model Campaign {
   priority           Int       @default(0)
   stackable          Boolean   @default(false)
   appliesTo          String    @default("all") // all, specific_products, specific_collections
-  productIds         String?   // JSON array of product IDs
-  collectionIds      String?   // JSON array of collection IDs
-  excludeProductIds  String?   // JSON array of excluded product IDs
+  productIds         String?   @db.Text // JSON array of product IDs
+  collectionIds      String?   @db.Text // JSON array of collection IDs
+  excludeProductIds  String?   @db.Text // JSON array of excluded product IDs
   minimumQuantity    Int?
   maximumQuantity    Int?
   minimumAmount      Float?    // Minimum order value (for shipping_discount, cart_goal, etc.)
@@ -56,22 +56,19 @@ model Campaign {
   combineWithShipping Boolean  @default(true)
 
   shopifyDiscountId  String?   // Discount node id returned by Shopify (so we can delete/update later)
-  tiers              String?   // JSON array of tier objects { qty, discount }
+  tiers              String?   @db.VarChar(10000) // JSON array of tier objects { qty, discount }
   discountedVariants Int       @default(0)
 
   // Advanced discount code — email-capture popup
   discountCode       String?   // persisted so the popup email can send it to shoppers
   popupEnabled       Boolean   @default(false)
-  popupPages         String?   // JSON array e.g. ["all"] or ["index","product","cart"]
-  popupHeading       String?
-  popupDescription   String?
-  popupButtonText    String?
+  popupPages         String?   @db.Text // JSON array e.g. ["all"] or ["index","product","cart"]
+  popupHeading       String?   @db.Text
+  popupDescription   String?   @db.Text
+  popupButtonText    String?   @db.Text
   popupDelaySeconds  Int?      // wait this long before first showing the popup; null = use the theme app-embed default
   popupFrequencyValue Int?     // how long to wait before re-showing after a shopper closes it
   popupFrequencyUnit  String?  // "minutes" | "hours"
-  // Content of the discount-code email (separate from the on-site popup text).
-  // JSON { heading, body, buttonText, buttonUrl, footer }. On MySQL: @db.Text.
-  emailContent       String?   // JSON email content blob
 
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -102,7 +99,7 @@ model Setting {
   displaySavings      Boolean @default(true)
   savingsFormat       String  @default("percentage")
   excludeSaleProducts Boolean @default(false)
-  customCss           String  @default("")
+  customCss           String  @default("") @db.VarChar(5000)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
@@ -111,7 +108,7 @@ model WidgetCustomization {
   id          String @id @default(cuid())
   shop        String
   widgetType  String // countdown_start, countdown_end, quantity_table, bxgy_popup, shipping_bar, saving_cart, bxgy_fab
-  config      String // JSON configuration
+  config      String @db.Text // JSON configuration
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -125,7 +122,7 @@ model Subscription {
   planId              String
   status              String    @default("pending")
   shopifyChargeId     String?
-  confirmationUrl     String?
+  confirmationUrl     String?   @db.Text
   currentPeriodEnd    DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -149,8 +146,8 @@ model CampaignAnalytics {
 
   // Product/collection targeting snapshot
   appliesTo           String   @default("all")
-  productIds          String?  // JSON array of {id, title, image} objects
-  collectionIds       String?  // JSON array of {id, title} objects
+  productIds          String?  @db.Text // JSON array of {id, title, image} objects
+  collectionIds       String?  @db.Text // JSON array of {id, title} objects
 
   // Performance metrics
   totalOrders         Int      @default(0)
@@ -162,16 +159,16 @@ model CampaignAnalytics {
   conversionRate      Float    @default(0)  // percentage
 
   // Tier breakdown (for quantity/bulk discount) — JSON array of {qty, discount, usageCount}
-  tierBreakdown       String?
+  tierBreakdown       String?  @db.Text
 
   // Buy X Get Y breakdown — JSON {buyQty, getQty, usageCount, freeItemsGiven}
-  bxgyBreakdown       String?
+  bxgyBreakdown       String?  @db.Text
 
   // Shipping discount breakdown — JSON {domestic, international, totalOrders}
-  shippingBreakdown   String?
+  shippingBreakdown   String?  @db.Text
 
   // Top products by discount usage — JSON array of {productId, title, ordersCount, discountTotal}
-  topProducts         String?
+  topProducts         String?  @db.Text
 
   // Shopify discount node id for reference
   shopifyDiscountId   String?

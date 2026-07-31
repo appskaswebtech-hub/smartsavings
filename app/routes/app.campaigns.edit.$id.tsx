@@ -2603,6 +2603,8 @@ import {
   Badge,
 } from "@shopify/polaris";
 import { useState } from "react";
+import { buildEmailHtml, discountLabel, legacyToBlocks, type EmailBlock } from "../lib/emailTemplate";
+import { EmailBlockEditor } from "../components/EmailBlockEditor";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -2879,6 +2881,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const popupHeading = (formData.get("popupHeading") as string) || "Get your exclusive discount!";
   const popupBody = (formData.get("popupBody") as string) || "Enter your email below to reveal your discount code.";
   const popupButtonText = (formData.get("popupButtonText") as string) || "Reveal my code";
+  const emailContent = (formData.get("emailContent") as string) || null;
   // Blank means "use the theme app-embed default" — stays null so it can't be
   // confused with an explicit 0 (show the popup immediately).
   const popupDelayRaw = ((formData.get("popupDelaySeconds") as string) || "").trim();
@@ -2949,6 +2952,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       popupHeading,
       popupDescription: popupBody,
       popupButtonText,
+      emailContent,
       popupPages,
       popupDelaySeconds,
       popupFrequencyValue: reDisplayValue,
@@ -3138,6 +3142,21 @@ export default function EditCampaign() {
   const [popupHeading, setPopupHeading] = useState<string>(campaign.popupHeading ?? "Get your exclusive discount!");
   const [popupBody, setPopupBody] = useState<string>(campaign.popupDescription ?? "Enter your email below to reveal your discount code.");
   const [popupButtonText, setPopupButtonText] = useState<string>(campaign.popupButtonText ?? "Reveal my code");
+  // Email content — a JSON blob separate from the popup text above. New campaigns
+  // store { blocks }; older ones store fixed fields, which migrate into blocks.
+  const [emailBlocks, setEmailBlocks] = useState<EmailBlock[]>(() => {
+    let parsed: any = {};
+    try { parsed = JSON.parse((campaign as any).emailContent ?? "{}"); } catch {}
+    if (Array.isArray(parsed.blocks) && parsed.blocks.length > 0) return parsed.blocks as EmailBlock[];
+    return legacyToBlocks(parsed);
+  });
+  // Live preview of the code email, built from the same template the sender uses.
+  const emailPreviewHtml = buildEmailHtml({
+    code: discountCode || "SAMPLE10",
+    discountLabel: discountLabel(discountType, parseFloat(discountValue) || null),
+    shop: campaign.shop,
+    blocks: emailBlocks,
+  });
   // Blank = fall back to the theme app-embed delay, so keep null distinct from 0.
   const [popupDelaySeconds, setPopupDelaySeconds] = useState<string>(
     campaign.popupDelaySeconds == null ? "" : String(campaign.popupDelaySeconds)
@@ -3348,6 +3367,7 @@ export default function EditCampaign() {
       fd.append("popupHeading", popupHeading);
       fd.append("popupBody", popupBody);
       fd.append("popupButtonText", popupButtonText);
+      fd.append("emailContent", JSON.stringify({ blocks: emailBlocks }));
       fd.append("popupDelaySeconds", popupDelaySeconds);
       fd.append("popupPages", JSON.stringify(popupPageScope === "all" ? ["all"] : popupPageTypes));
     }
@@ -4211,6 +4231,27 @@ export default function EditCampaign() {
                         onChange={setPopupButtonText}
                         autoComplete="off"
                       />
+                      <Divider />
+                      <BlockStack gap="200">
+                        <Text as="p" variant="bodyMd" fontWeight="medium">Email content</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          The email a shopper receives with their code — separate from the popup text above. Build it from blocks.
+                        </Text>
+                        <EmailBlockEditor blocks={emailBlocks} onChange={setEmailBlocks} />
+                        <BlockStack gap="100">
+                          <Text as="p" variant="bodyMd" fontWeight="medium">Preview</Text>
+                          <iframe
+                            title="Email preview"
+                            srcDoc={emailPreviewHtml}
+                            style={{
+                              width: "100%",
+                              height: "540px",
+                              border: "1px solid #e1e3e5",
+                              borderRadius: "8px",
+                            }}
+                          />
+                        </BlockStack>
+                      </BlockStack>
                       <BlockStack gap="200">
                         <Text as="p" variant="bodyMd" fontWeight="medium">Show popup on</Text>
                         <Checkbox

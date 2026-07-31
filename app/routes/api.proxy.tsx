@@ -78,13 +78,7 @@ import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-r
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
 import { sendDiscountCodeEmail } from "../email.server";
-
-// Human-readable label for the popup email, e.g. "20% off"
-function discountLabel(discountType: string, discountValue: number | null): string {
-  if (discountType === "free_shipping") return "Free shipping";
-  if (discountType === "percentage") return `${discountValue ?? 0}% off`;
-  return `$${discountValue ?? 0} off`;
-}
+import { discountLabel } from "../lib/emailTemplate";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
@@ -237,6 +231,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ success: false, error: "This offer is no longer available." }, { status: 404 });
   }
 
+  // Email content authored on the campaign. Newer campaigns store { blocks };
+  // older ones store fixed fields; the template renders whichever is present, and
+  // falls back to the on-site popup text if neither exists.
+  let emailContent: {
+    blocks?: any[];
+    heading?: string;
+    body?: string;
+    buttonText?: string;
+    buttonUrl?: string;
+    footer?: string;
+  } = {};
+  if (campaign.emailContent) {
+    try { emailContent = JSON.parse(campaign.emailContent); } catch {}
+  }
+
   // Send the code via Gmail SMTP
   const emailResult = await sendDiscountCodeEmail({
     to: email,
@@ -244,8 +253,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     campaignName: campaign.name,
     discountLabel: discountLabel(campaign.discountType, campaign.discountValue),
     shop,
-    heading: campaign.popupHeading,
-    description: campaign.popupDescription,
+    blocks: Array.isArray(emailContent.blocks) ? emailContent.blocks : undefined,
+    heading: emailContent.heading || campaign.popupHeading,
+    body: emailContent.body || campaign.popupDescription,
+    buttonText: emailContent.buttonText,
+    buttonUrl: emailContent.buttonUrl,
+    footer: emailContent.footer,
   });
 
   if (!emailResult.success) {

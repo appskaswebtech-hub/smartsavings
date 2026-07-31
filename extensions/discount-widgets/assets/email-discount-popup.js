@@ -120,6 +120,21 @@
       }
     }
 
+    // Font sizes from Customization → Discount pop-up (blank = theme CSS default)
+    var sz = function (v) { return (v !== undefined && v !== null && v !== '' && !isNaN(Number(v))) ? Number(v) + 'px' : null; };
+    if (sz(style.headingSize)) overlay.querySelector('#sd-ep-heading').style.fontSize = sz(style.headingSize);
+    if (sz(style.textSize)) overlay.querySelector('#sd-ep-desc').style.fontSize = sz(style.textSize);
+    if (sz(style.buttonSize)) overlay.querySelector('#sd-ep-submit').style.fontSize = sz(style.buttonSize);
+
+    // Per-element font family + alignment from Customization → Discount pop-up
+    var setStyle = function (sel, prop, val) { if (val) { var el = overlay.querySelector(sel); if (el) el.style[prop] = val; } };
+    setStyle('#sd-ep-heading', 'fontFamily', style.headingFont);
+    setStyle('#sd-ep-heading', 'textAlign', style.headingAlign);
+    setStyle('#sd-ep-desc', 'fontFamily', style.textFont);
+    setStyle('#sd-ep-desc', 'textAlign', style.textAlign);
+    setStyle('#sd-ep-submit', 'fontFamily', style.buttonFont);
+    setStyle('#sd-ep-submit', 'textAlign', style.buttonAlign);
+
     // textContent avoids injecting merchant-configured text as HTML
     overlay.querySelector('#sd-ep-heading').textContent = heading;
     overlay.querySelector('#sd-ep-desc').textContent = desc;

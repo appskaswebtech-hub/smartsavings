@@ -1,7 +1,7 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit } from "@remix-run/react";
 import {
-  Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Layout, Banner,
+  Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Select, Layout, Banner,
 } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
@@ -9,6 +9,23 @@ import db from "../db.server";
 import { ColorPickerInput, StickyPreview, DeviceMockup, LayoutControls, layoutStyle, type LayoutValue } from "../components/CustomizationWidgets";
 
 const WIDGET_TYPE = "discount_popup";
+
+const FONT_OPTIONS = [
+  { label: "Theme default", value: "" },
+  { label: "Arial", value: "Arial, Helvetica, sans-serif" },
+  { label: "Helvetica", value: "Helvetica, Arial, sans-serif" },
+  { label: "Verdana", value: "Verdana, Geneva, sans-serif" },
+  { label: "Tahoma", value: "Tahoma, sans-serif" },
+  { label: "Trebuchet MS", value: "'Trebuchet MS', sans-serif" },
+  { label: "Georgia", value: "Georgia, serif" },
+  { label: "Times New Roman", value: "'Times New Roman', Times, serif" },
+  { label: "Courier New", value: "'Courier New', monospace" },
+];
+const ALIGN_OPTIONS = [
+  { label: "Left", value: "left" },
+  { label: "Center", value: "center" },
+  { label: "Right", value: "right" },
+];
 
 // Appearance defaults — must match the hard defaults in email-discount-popup.liquid
 const DEFAULTS = {
@@ -75,6 +92,23 @@ export default function DiscountPopupCustomization() {
   const [borderRadius, setBorderRadius] = useState<string>(
     String(config?.borderRadius ?? DEFAULTS.borderRadius)
   );
+  // Font sizes (px) — blank means "use the storefront default".
+  const [headingSize, setHeadingSize] = useState<string>(
+    config?.headingSize != null ? String(config.headingSize) : ""
+  );
+  const [textSize, setTextSize] = useState<string>(
+    config?.textSize != null ? String(config.textSize) : ""
+  );
+  const [buttonSize, setButtonSize] = useState<string>(
+    config?.buttonSize != null ? String(config.buttonSize) : ""
+  );
+  // Per-element font family + alignment ("" = theme/CSS default).
+  const [headingFont, setHeadingFont] = useState<string>(config?.headingFont ?? "");
+  const [headingAlign, setHeadingAlign] = useState<string>(config?.headingAlign ?? "left");
+  const [textFont, setTextFont] = useState<string>(config?.textFont ?? "");
+  const [textAlign, setTextAlign] = useState<string>(config?.textAlign ?? "left");
+  const [buttonFont, setButtonFont] = useState<string>(config?.buttonFont ?? "");
+  const [buttonAlign, setButtonAlign] = useState<string>(config?.buttonAlign ?? "center");
 
   const [layout, setLayout] = useState<LayoutValue>(config?.layout ?? {});
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
@@ -91,6 +125,15 @@ export default function DiscountPopupCustomization() {
     setButtonTextColor(DEFAULTS.buttonTextColor);
     setInputBorderColor(DEFAULTS.inputBorderColor);
     setBorderRadius(String(DEFAULTS.borderRadius));
+    setHeadingSize("");
+    setTextSize("");
+    setButtonSize("");
+    setHeadingFont("");
+    setHeadingAlign("left");
+    setTextFont("");
+    setTextAlign("left");
+    setButtonFont("");
+    setButtonAlign("center");
   };
 
   const handleSave = () => {
@@ -108,6 +151,13 @@ export default function DiscountPopupCustomization() {
         buttonTextColor,
         inputBorderColor,
         borderRadius: parseInt(borderRadius, 10) || 0,
+        // Omit sizes when blank so the storefront CSS default stands.
+        headingSize: headingSize === "" ? undefined : parseInt(headingSize, 10),
+        textSize: textSize === "" ? undefined : parseInt(textSize, 10),
+        buttonSize: buttonSize === "" ? undefined : parseInt(buttonSize, 10),
+        headingFont, headingAlign,
+        textFont, textAlign,
+        buttonFont, buttonAlign,
         layout,
       })
     );
@@ -138,10 +188,10 @@ export default function DiscountPopupCustomization() {
           ...layoutStyle(layout),
         }}
       >
-        <div style={{ fontSize: "15px", fontWeight: 700, color: headingColor, marginBottom: "6px" }}>
+        <div style={{ fontSize: `${parseInt(headingSize, 10) || 15}px`, fontWeight: 700, color: headingColor, marginBottom: "6px", fontFamily: headingFont || undefined, textAlign: (headingAlign as any) || "left" }}>
           Get your discount code
         </div>
-        <div style={{ fontSize: "11px", color: textColor, marginBottom: "12px", lineHeight: 1.5 }}>
+        <div style={{ fontSize: `${parseInt(textSize, 10) || 11}px`, color: textColor, marginBottom: "12px", lineHeight: 1.5, fontFamily: textFont || undefined, textAlign: (textAlign as any) || "left" }}>
           Enter your email and we'll send your code to your inbox.
         </div>
         <div
@@ -162,9 +212,10 @@ export default function DiscountPopupCustomization() {
             color: buttonTextColor,
             borderRadius: `${Math.max(4, radiusPx - 6)}px`,
             padding: "9px",
-            fontSize: "12px",
+            fontSize: `${parseInt(buttonSize, 10) || 12}px`,
             fontWeight: 700,
-            textAlign: "center" as const,
+            textAlign: (buttonAlign as any) || "center",
+            fontFamily: buttonFont || undefined,
           }}
         >
           Email me the code
@@ -227,15 +278,7 @@ export default function DiscountPopupCustomization() {
 
                 <Text as="p" variant="bodySm" fontWeight="bold">Modal</Text>
                 <ColorPickerInput label="Background" value={modalBg} onChange={setModalBg} />
-                <ColorPickerInput label="Heading color" value={headingColor} onChange={setHeadingColor} />
-                <ColorPickerInput label="Text color" value={textColor} onChange={setTextColor} />
                 <ColorPickerInput label="Input border color" value={inputBorderColor} onChange={setInputBorderColor} />
-
-                <Text as="p" variant="bodySm" fontWeight="bold">Button</Text>
-                <ColorPickerInput label="Button background" value={buttonBg} onChange={setButtonBg} />
-                <ColorPickerInput label="Button text color" value={buttonTextColor} onChange={setButtonTextColor} />
-
-                <Text as="p" variant="bodySm" fontWeight="bold">Shape</Text>
                 <TextField
                   label="Corner radius (px)"
                   type="number"
@@ -248,6 +291,37 @@ export default function DiscountPopupCustomization() {
                   }}
                   autoComplete="off"
                 />
+
+                <Text as="p" variant="bodySm" fontWeight="bold">Heading</Text>
+                <ColorPickerInput label="Color" value={headingColor} onChange={setHeadingColor} />
+                <InlineStack gap="300" wrap>
+                  <div style={{ width: "120px" }}>
+                    <TextField label="Font size" type="number" min={8} max={48} suffix="px" autoComplete="off" placeholder="default" value={headingSize} onChange={(v) => { const n = parseInt(v, 10); if (v === "" || (!isNaN(n) && n >= 0)) setHeadingSize(v); }} />
+                  </div>
+                  <div style={{ width: "170px" }}><Select label="Font" options={FONT_OPTIONS} value={headingFont} onChange={setHeadingFont} /></div>
+                  <div style={{ width: "130px" }}><Select label="Align" options={ALIGN_OPTIONS} value={headingAlign} onChange={setHeadingAlign} /></div>
+                </InlineStack>
+
+                <Text as="p" variant="bodySm" fontWeight="bold">Body text</Text>
+                <ColorPickerInput label="Color" value={textColor} onChange={setTextColor} />
+                <InlineStack gap="300" wrap>
+                  <div style={{ width: "120px" }}>
+                    <TextField label="Font size" type="number" min={8} max={32} suffix="px" autoComplete="off" placeholder="default" value={textSize} onChange={(v) => { const n = parseInt(v, 10); if (v === "" || (!isNaN(n) && n >= 0)) setTextSize(v); }} />
+                  </div>
+                  <div style={{ width: "170px" }}><Select label="Font" options={FONT_OPTIONS} value={textFont} onChange={setTextFont} /></div>
+                  <div style={{ width: "130px" }}><Select label="Align" options={ALIGN_OPTIONS} value={textAlign} onChange={setTextAlign} /></div>
+                </InlineStack>
+
+                <Text as="p" variant="bodySm" fontWeight="bold">Button</Text>
+                <ColorPickerInput label="Background" value={buttonBg} onChange={setButtonBg} />
+                <ColorPickerInput label="Text color" value={buttonTextColor} onChange={setButtonTextColor} />
+                <InlineStack gap="300" wrap>
+                  <div style={{ width: "120px" }}>
+                    <TextField label="Font size" type="number" min={8} max={32} suffix="px" autoComplete="off" placeholder="default" value={buttonSize} onChange={(v) => { const n = parseInt(v, 10); if (v === "" || (!isNaN(n) && n >= 0)) setButtonSize(v); }} />
+                  </div>
+                  <div style={{ width: "170px" }}><Select label="Font" options={FONT_OPTIONS} value={buttonFont} onChange={setButtonFont} /></div>
+                  <div style={{ width: "130px" }}><Select label="Align" options={ALIGN_OPTIONS} value={buttonAlign} onChange={setButtonAlign} /></div>
+                </InlineStack>
               </BlockStack>
             </Card>
 
