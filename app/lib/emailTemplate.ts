@@ -11,15 +11,28 @@ export interface BlockStyle {
   color?: string;      // text/foreground (hex); for button, the text color
   bgColor?: string;    // block background; for button, the fill
   fontSize?: number;   // px — heading / text / link
-  width?: number;      // percent 10–100 — image
+  /** @deprecated Legacy percent image width. Still rendered when `widthPx` is unset. */
+  width?: number;
   align?: "left" | "center" | "right";
+  // Padding around the block, px. Each side falls back to defaultPadding().
+  padTop?: number;
+  padRight?: number;
+  padBottom?: number;
+  padLeft?: number;
 }
 
 /** A single block in the email builder. Discriminated by `type`; styled by BlockStyle. */
 export type EmailBlock = BlockStyle & (
   | { id: string; type: "heading"; text?: string }
   | { id: string; type: "text"; text?: string }
-  | { id: string; type: "image"; url?: string; alt?: string; link?: string }
+  | {
+      id: string; type: "image"; url?: string; alt?: string; link?: string;
+      inline?: boolean;   // render side by side with adjacent inline images
+      widthPx?: number;   // px width (falls back to the legacy `width` percent)
+      heightPx?: number;  // px height; omitted when unset so the ratio is kept
+      showCaption?: boolean; // render `alt` as a visible caption under the image
+      gap?: number;       // px space between images in the row
+    }
   | { id: string; type: "button"; label?: string; url?: string }
   | { id: string; type: "link"; text?: string; url?: string }
   | { id: string; type: "code" }
@@ -128,13 +141,49 @@ function cssAlign(v: BlockStyle["align"]): "left" | "center" | "right" {
   return v === "center" || v === "right" ? v : "left";
 }
 
+/** Padding a block uses when the merchant hasn't overridden a side: [top, right, bottom, left]. */
+export type Padding = [number, number, number, number];
+export function defaultPadding(block: EmailBlock): Padding {
+  // Full-width images bleed to the card edge; a side-by-side row is inset like text.
+  return block.type === "image" && !block.inline ? [16, 0, 16, 0] : [16, 32, 16, 32];
+}
+
+// The `padding` shorthand for a block's cell, each side falling back to `def`.
+function cellPadding(block: EmailBlock, def: Padding): string {
+  const [t, r, b, l] = def;
+  return `${cssNum(block.padTop, t, 0, 200)}px ${cssNum(block.padRight, r, 0, 200)}px ` +
+    `${cssNum(block.padBottom, b, 0, 200)}px ${cssNum(block.padLeft, l, 0, 200)}px`;
+}
+
+// Width/height for an <img>: explicit px wins, then the legacy percent width,
+// then full-bleed. Height is omitted entirely unless set, so images keep their
+// aspect ratio by default. Returns the CSS and the HTML attributes, which
+// Outlook honours more reliably than the inline style.
+function imgSize(block: Extract<EmailBlock, { type: "image" }>, pxFallback?: number): { css: string; attrs: string } {
+  const px = block.widthPx ?? pxFallback;
+  const w = px != null
+    ? { css: `width:${cssNum(px, 32, 8, 1000)}px;`, attrs: ` width="${cssNum(px, 32, 8, 1000)}"` }
+    : { css: `width:${cssNum(block.width, 100, 10, 100)}%;`, attrs: "" };
+  if (block.heightPx == null) return w;
+  const h = cssNum(block.heightPx, 32, 8, 1000);
+  return { css: `${w.css}height:${h}px;`, attrs: `${w.attrs} height="${h}"` };
+}
+
+// `alt` is only surfaced by mail clients when the image fails to load, so a
+// merchant who wants words under the image gets them rendered for real.
+function captionHtml(block: Extract<EmailBlock, { type: "image" }>): string {
+  const text = block.alt?.trim();
+  if (!block.showCaption || !text) return "";
+  return `<div style="font-size:13px;line-height:1.4;color:#888888;padding-top:6px;">${escapeHtml(text)}</div>`;
+}
+
 function renderBlock(block: EmailBlock, ctx: BlockContext): string {
   const align = cssAlign(block.align);
   // td padding + optional background + alignment, shared by all block cells.
-  const cell = (inner: string, pad = "16px 32px") => {
+  const cell = (inner: string, def: Padding = [16, 32, 16, 32]) => {
     const bg = block.bgColor && /^#[0-9a-fA-F]{3,8}$/.test(block.bgColor.trim())
       ? `background:${block.bgColor.trim()};` : "";
-    return `<tr><td style="padding:${pad};${bg}text-align:${align};">${inner}</td></tr>`;
+    return `<tr><td style="padding:${cellPadding(block, def)};${bg}text-align:${align};">${inner}</td></tr>`;
   };
 
   switch (block.type) {
@@ -145,13 +194,14 @@ function renderBlock(block: EmailBlock, ctx: BlockContext): string {
     case "image": {
       const url = block.url?.trim();
       if (!url) return "";
-      const w = cssNum(block.width, 100, 10, 100);
+      const size = imgSize(block);
       // margin auto only centers a below-full-width image.
       const margin = align === "center" ? "margin:0 auto;" : align === "right" ? "margin-left:auto;" : "";
-      const img = `<img src="${escapeHtml(url)}" alt="${escapeHtml(block.alt?.trim() || "")}" style="display:block;width:${w}%;max-width:100%;border:0;${margin}" />`;
+      const img = `<img src="${escapeHtml(url)}" alt="${escapeHtml(block.alt?.trim() || "")}"${size.attrs} style="display:block;${size.css}max-width:100%;border:0;${margin}" />`;
       const link = block.link?.trim();
       const inner = link ? `<a href="${escapeHtml(link)}" style="text-decoration:none;">${img}</a>` : img;
-      return cell(inner, "16px 0");
+      // Caption sits outside the link — it describes the image, it isn't part of the target.
+      return cell(`${inner}${captionHtml(block)}`, [16, 0, 16, 0]);
     }
     case "button": {
       const label = block.label?.trim();
@@ -173,6 +223,43 @@ function renderBlock(block: EmailBlock, ctx: BlockContext): string {
         </div>`
       );
   }
+}
+
+type ImageBlock = Extract<EmailBlock, { type: "image" }>;
+
+/** True for an image block that should share a row with its inline neighbours. */
+export function isInlineImage(block: EmailBlock | undefined): block is ImageBlock {
+  return !!block && block.type === "image" && block.inline === true;
+}
+
+// A run of consecutive inline image blocks, rendered as one row. Alignment,
+// background and gap come from the first block that actually has an image — a
+// half-configured block with no URL yet is passed over rather than splitting
+// the row. A nested table is used rather than inline-block anchors because
+// Outlook's Word engine ignores display:inline-block, and table cells avoid
+// the inline-whitespace gap.
+function renderInlineImageRow(group: ImageBlock[]): string {
+  const shown = group.filter((b) => b.url?.trim());
+  if (shown.length === 0) return "";
+  const lead = shown[0];
+  const align = cssAlign(lead.align);
+  const bg = lead.bgColor && /^#[0-9a-fA-F]{3,8}$/.test(lead.bgColor.trim())
+    ? `background:${lead.bgColor.trim()};` : "";
+  const pad = cssNum(lead.gap, 12, 0, 64) / 2;
+
+  const cells = shown.map((block) => {
+    // 32px is the default icon size for a side-by-side image.
+    const size = imgSize(block, 32);
+    // A caption can be wider than the icon it sits under, which widens the
+    // cell — center both so the icon doesn't end up off to one side.
+    const caption = captionHtml(block);
+    const img = `<img src="${escapeHtml(block.url!.trim())}" alt="${escapeHtml(block.alt?.trim() || "")}"${size.attrs} style="display:block;${size.css}max-width:100%;border:0;${caption ? "margin:0 auto;" : ""}" />`;
+    const link = block.link?.trim();
+    const inner = link ? `<a href="${escapeHtml(link)}" style="text-decoration:none;">${img}</a>` : img;
+    return `<td style="padding:0 ${pad}px;${caption ? "text-align:center;" : ""}">${inner}${caption}</td>`;
+  }).join("");
+
+  return `<tr><td style="padding:${cellPadding(lead, [16, 32, 16, 32])};${bg}text-align:${align};"><table role="presentation" align="${align}" cellpadding="0" cellspacing="0" border="0" style="display:inline-table;"><tr>${cells}</tr></table></td></tr>`;
 }
 
 function wrapCard(rowsHtml: string): string {
@@ -199,8 +286,24 @@ export function buildEmailHtml(args: EmailContentArgs): string {
   // path for campaigns saved before the builder existed (rendered unchanged).
   if (args.blocks && args.blocks.length > 0) {
     const ctx: BlockContext = { code: args.code, discountLabel: args.discountLabel, shop: args.shop };
-    const rows = args.blocks.map((b) => renderBlock(b, ctx)).join("\n            ");
-    return wrapCard(rows);
+    const out: string[] = [];
+    // Walk rather than map: a run of consecutive inline image blocks collapses
+    // into a single row so the images sit side by side.
+    for (let i = 0; i < args.blocks.length; i++) {
+      const block = args.blocks[i];
+      if (isInlineImage(block)) {
+        const group: ImageBlock[] = [];
+        while (i < args.blocks.length && isInlineImage(args.blocks[i])) {
+          group.push(args.blocks[i] as ImageBlock);
+          i++;
+        }
+        i--; // the for-loop's i++ consumes the block that ended the run
+        out.push(renderInlineImageRow(group));
+      } else {
+        out.push(renderBlock(block, ctx));
+      }
+    }
+    return wrapCard(out.join("\n            "));
   }
 
   const heading = escapeHtml(args.heading?.trim() || "Here's your discount code");

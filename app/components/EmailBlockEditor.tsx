@@ -13,6 +13,7 @@ import {
   BlockStack,
   Box,
   Button,
+  Checkbox,
   DropZone,
   InlineStack,
   Select,
@@ -20,7 +21,7 @@ import {
   Text,
   TextField,
 } from "@shopify/polaris";
-import { newBlock, type EmailBlock } from "../lib/emailTemplate";
+import { defaultPadding, isInlineImage, newBlock, type EmailBlock } from "../lib/emailTemplate";
 
 type Patch = Partial<Record<string, unknown>>;
 
@@ -60,13 +61,13 @@ function ColorControl({
 }
 
 function NumberControl({
-  label, value, placeholder, suffix, onChange,
+  label, value, placeholder, suffix, onChange, width = 120,
 }: {
-  label: string; value?: number; placeholder: string; suffix: string;
-  onChange: (v?: number) => void;
+  label: string; value?: number; placeholder: string; suffix?: string;
+  onChange: (v?: number) => void; width?: number;
 }) {
   return (
-    <div style={{ width: 120 }}>
+    <div style={{ width }}>
       <TextField
         label={label} type="number" autoComplete="off" suffix={suffix}
         placeholder={placeholder}
@@ -83,8 +84,34 @@ const ALIGN_OPTIONS = [
   { label: "Right", value: "right" },
 ];
 
-// The style row, tailored per block type.
-function StyleRow({ block, onPatch }: { block: EmailBlock; onPatch: (p: Patch) => void }) {
+const DISPLAY_OPTIONS = [
+  { label: "Full width", value: "block" },
+  { label: "Side by side", value: "inline" },
+];
+
+// Space around the block. Placeholders show what the block currently renders
+// with, so a blank field reads as "unchanged" rather than "zero".
+function SpacingRow({ block, onPatch }: { block: EmailBlock; onPatch: (p: Patch) => void }) {
+  const [top, right, bottom, left] = defaultPadding(block);
+  return (
+    <BlockStack gap="050">
+      <Text as="span" variant="bodySm" tone="subdued">Spacing (px)</Text>
+      <InlineStack gap="200" blockAlign="end" wrap>
+        <NumberControl label="Top" width={92} value={block.padTop} placeholder={String(top)} onChange={(v) => onPatch({ padTop: v })} />
+        <NumberControl label="Bottom" width={92} value={block.padBottom} placeholder={String(bottom)} onChange={(v) => onPatch({ padBottom: v })} />
+        <NumberControl label="Left" width={92} value={block.padLeft} placeholder={String(left)} onChange={(v) => onPatch({ padLeft: v })} />
+        <NumberControl label="Right" width={92} value={block.padRight} placeholder={String(right)} onChange={(v) => onPatch({ padRight: v })} />
+      </InlineStack>
+    </BlockStack>
+  );
+}
+
+// The style row, tailored per block type. `rowLeader` is false only for a
+// side-by-side image that follows another one — those share the first image's
+// gap and alignment, so those controls are hidden to avoid implying otherwise.
+function StyleRow({
+  block, onPatch, rowLeader = true,
+}: { block: EmailBlock; onPatch: (p: Patch) => void; rowLeader?: boolean }) {
   const align = (
     <div style={{ width: 130 }}>
       <Select
@@ -117,11 +144,58 @@ function StyleRow({ block, onPatch }: { block: EmailBlock; onPatch: (p: Patch) =
     );
   }
   if (block.type === "image") {
+    const display = (
+      <div style={{ width: 150 }}>
+        <Select
+          label="Display" options={DISPLAY_OPTIONS}
+          value={block.inline ? "inline" : "block"}
+          onChange={(v) => onPatch({ inline: v === "inline" })}
+        />
+      </div>
+    );
+    const size = (
+      <>
+        <NumberControl label="Width" value={block.widthPx} placeholder={block.inline ? "32" : "auto"} suffix="px" onChange={(v) => onPatch({ widthPx: v })} />
+        <NumberControl label="Height" value={block.heightPx} placeholder="auto" suffix="px" onChange={(v) => onPatch({ heightPx: v })} />
+      </>
+    );
+    // Older campaigns stored a percent width; the control is gone but the
+    // renderer still honours it, so say so rather than showing a blank Width.
+    const legacyWidth = block.width != null && block.widthPx == null ? (
+      <Text as="span" variant="bodySm" tone="subdued">
+        Currently {block.width}% wide. Enter a pixel width to replace it.
+      </Text>
+    ) : null;
+
+    if (!block.inline) {
+      return (
+        <BlockStack gap="150">
+          <InlineStack gap="300" blockAlign="end" wrap>
+            {display}
+            {size}
+            {align}
+          </InlineStack>
+          {legacyWidth}
+        </BlockStack>
+      );
+    }
     return (
-      <InlineStack gap="300" blockAlign="end" wrap>
-        <NumberControl label="Width" value={block.width} placeholder="100" suffix="%" onChange={(v) => onPatch({ width: v })} />
-        {align}
-      </InlineStack>
+      <BlockStack gap="150">
+        <InlineStack gap="300" blockAlign="end" wrap>
+          {display}
+          {size}
+          {rowLeader && (
+            <NumberControl label="Gap" value={block.gap} placeholder="12" suffix="px" onChange={(v) => onPatch({ gap: v })} />
+          )}
+          {rowLeader && align}
+        </InlineStack>
+        {legacyWidth}
+        <Text as="span" variant="bodySm" tone="subdued">
+          {rowLeader
+            ? "Sits in the same row as the side-by-side images directly below it."
+            : "Shares the row above — its gap and alignment apply to this image too."}
+        </Text>
+      </BlockStack>
     );
   }
   return null; // code: default styling
@@ -167,6 +241,12 @@ function ImageBlockField({ block, onPatch }: { block: Extract<EmailBlock, { type
         helpText="Upload above, or paste a hosted image URL."
       />
       <TextField label="Alt text" autoComplete="off" value={block.alt ?? ""} onChange={(v) => onPatch({ alt: v })} />
+      <Checkbox
+        label="Show text below image"
+        helpText="Displays the alt text above as a caption under the image."
+        checked={block.showCaption ?? false}
+        onChange={(v) => onPatch({ showCaption: v })}
+      />
       <TextField
         label="Link (optional)" autoComplete="off"
         placeholder="https://your-store.com/..."
@@ -203,6 +283,15 @@ export function EmailBlockEditor({
     <BlockStack gap="300">
       {blocks.map((block, i) => {
         const onPatch = (p: Patch) => patch(block.id, p);
+        // Mirrors the run-grouping in buildEmailHtml: within a run of
+        // side-by-side images, the first one that has a URL owns the row's gap
+        // and alignment. Walk back over the run to find out if that's us.
+        let rowLeader = true;
+        if (isInlineImage(block)) {
+          for (let j = i - 1; j >= 0 && isInlineImage(blocks[j]); j--) {
+            if ((blocks[j] as typeof block).url?.trim()) { rowLeader = false; break; }
+          }
+        }
         return (
           <Box key={block.id} padding="300" borderColor="border" borderWidth="025" borderRadius="200">
             <BlockStack gap="200">
@@ -240,7 +329,9 @@ export function EmailBlockEditor({
                 </Text>
               )}
 
-              <StyleRow block={block} onPatch={onPatch} />
+              <StyleRow block={block} onPatch={onPatch} rowLeader={rowLeader} />
+              {/* Padding is row-level, so only the lead image of a side-by-side row owns it. */}
+              {rowLeader && <SpacingRow block={block} onPatch={onPatch} />}
             </BlockStack>
           </Box>
         );

@@ -71,7 +71,7 @@ model Campaign {
   popupFrequencyUnit  String?  // "minutes" | "hours"
   // Content of the discount-code email (separate from the on-site popup text).
   // JSON { heading, body, buttonText, buttonUrl, footer }. On MySQL: @db.Text.
-  emailContent       String?   // JSON email content blob
+  emailContent       String?   @db.VarChar(10000)
 
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt

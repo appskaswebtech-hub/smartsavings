@@ -886,6 +886,7 @@ import { ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
 import { useState } from "react";
 import { buildEmailHtml, discountLabel, newBlock, type EmailBlock } from "../lib/emailTemplate";
 import { EmailBlockEditor } from "../components/EmailBlockEditor";
+import { EmailPreview } from "../components/EmailPreview";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -2666,19 +2667,7 @@ export default function NewCampaign() {
                           The email a shopper receives with their code — separate from the popup text above. Build it from blocks.
                         </Text>
                         <EmailBlockEditor blocks={emailBlocks} onChange={setEmailBlocks} />
-                        <BlockStack gap="100">
-                          <Text as="p" variant="bodySm" fontWeight="bold">Preview</Text>
-                          <iframe
-                            title="Email preview"
-                            srcDoc={emailPreviewHtml}
-                            style={{
-                              width: "100%",
-                              height: "540px",
-                              border: "1px solid #e1e3e5",
-                              borderRadius: "8px",
-                            }}
-                          />
-                        </BlockStack>
+                        <EmailPreview html={emailPreviewHtml} labelVariant="bodySm" labelWeight="bold" />
                       </BlockStack>
 
                       <BlockStack gap="200">
