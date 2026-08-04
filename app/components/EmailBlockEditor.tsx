@@ -22,6 +22,7 @@ import {
   TextField,
 } from "@shopify/polaris";
 import { defaultPadding, isInlineImage, newBlock, type EmailBlock } from "../lib/emailTemplate";
+import { normalizeUrl } from "../lib/normalizeUrl";
 
 type Patch = Partial<Record<string, unknown>>;
 
@@ -238,6 +239,7 @@ function ImageBlockField({ block, onPatch }: { block: Extract<EmailBlock, { type
         placeholder="https://cdn.shopify.com/..."
         value={block.url ?? ""}
         onChange={(v) => onPatch({ url: v })}
+        onBlur={() => onPatch({ url: normalizeUrl(block.url ?? "") })}
         helpText="Upload above, or paste a hosted image URL."
       />
       <TextField label="Alt text" autoComplete="off" value={block.alt ?? ""} onChange={(v) => onPatch({ alt: v })} />
@@ -252,7 +254,8 @@ function ImageBlockField({ block, onPatch }: { block: Extract<EmailBlock, { type
         placeholder="https://your-store.com/..."
         value={block.link ?? ""}
         onChange={(v) => onPatch({ link: v })}
-        helpText="Make the image clickable."
+        onBlur={() => onPatch({ link: normalizeUrl(block.link ?? "") })}
+        helpText="Make the image clickable. Paste any form — it's tidied automatically."
       />
     </BlockStack>
   );
@@ -314,13 +317,13 @@ export function EmailBlockEditor({
               {block.type === "button" && (
                 <BlockStack gap="200">
                   <TextField label="Button label" autoComplete="off" value={block.label ?? ""} onChange={(v) => onPatch({ label: v })} />
-                  <TextField label="Button link" autoComplete="off" placeholder="https://your-store.com/..." value={block.url ?? ""} onChange={(v) => onPatch({ url: v })} helpText="Defaults to your store home page." />
+                  <TextField label="Button link" autoComplete="off" placeholder="https://your-store.com/..." value={block.url ?? ""} onChange={(v) => onPatch({ url: v })} onBlur={() => onPatch({ url: normalizeUrl(block.url ?? "") })} helpText="Defaults to your store home page." />
                 </BlockStack>
               )}
               {block.type === "link" && (
                 <BlockStack gap="200">
                   <TextField label="Link text" autoComplete="off" value={block.text ?? ""} onChange={(v) => onPatch({ text: v })} />
-                  <TextField label="Link URL" autoComplete="off" value={block.url ?? ""} onChange={(v) => onPatch({ url: v })} />
+                  <TextField label="Link URL" autoComplete="off" value={block.url ?? ""} onChange={(v) => onPatch({ url: v })} onBlur={() => onPatch({ url: normalizeUrl(block.url ?? "") })} />
                 </BlockStack>
               )}
               {block.type === "code" && (
