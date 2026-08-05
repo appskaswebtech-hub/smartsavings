@@ -264,9 +264,14 @@ function ImageBlockField({ block, onPatch }: { block: Extract<EmailBlock, { type
 export function EmailBlockEditor({
   blocks,
   onChange,
+  senderName,
+  onSenderNameChange,
 }: {
   blocks: EmailBlock[];
   onChange: (blocks: EmailBlock[]) => void;
+  /** Display name on the From header. Blank falls back to the Shopify store name. */
+  senderName?: string;
+  onSenderNameChange?: (v: string) => void;
 }) {
   const [addType, setAddType] = useState<EmailBlock["type"]>("text");
 
@@ -284,6 +289,16 @@ export function EmailBlockEditor({
 
   return (
     <BlockStack gap="300">
+      {onSenderNameChange && (
+        <TextField
+          label="From name"
+          autoComplete="off"
+          placeholder="Your store name"
+          value={senderName ?? ""}
+          onChange={onSenderNameChange}
+          helpText="Shown as the sender in the shopper's inbox. Leave blank to use your Shopify store name. The sending address itself can't be changed."
+        />
+      )}
       {blocks.map((block, i) => {
         const onPatch = (p: Patch) => patch(block.id, p);
         // Mirrors the run-grouping in buildEmailHtml: within a run of

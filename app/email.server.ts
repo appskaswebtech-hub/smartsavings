@@ -5,7 +5,8 @@
  * Configured via environment variables:
  *   GMAIL_USER          — the Gmail address that sends the mail
  *   GMAIL_APP_PASSWORD  — a Google App Password (16 chars, spaces are ignored)
- *   GMAIL_SENDER_NAME   — display name for the sender (optional)
+ *   GMAIL_SENDER_NAME   — last-resort display name; callers normally pass the
+ *                         merchant's own name or their Shopify store name
  *
  * Never throws — returns { success, error? } so callers can degrade gracefully.
  */
@@ -18,6 +19,20 @@ interface SendDiscountCodeArgs extends EmailContentArgs {
   to: string;
   /** Used only in the subject line. */
   campaignName: string;
+  /**
+   * Display name for the From header — the merchant's own name, or their
+   * Shopify store name. Falls back to GMAIL_SENDER_NAME when unset.
+   * The address itself is always GMAIL_USER: Gmail rewrites any other sender
+   * unless it is a verified "Send mail as" alias on that account.
+   */
+  senderName?: string;
+}
+
+// This name comes from a merchant or from Shopify and goes straight into a mail
+// header, so strip quotes and CR/LF — a newline would let extra headers be
+// injected into the message. Capped at RFC 5322's practical line length.
+function headerSafe(name: string | undefined): string {
+  return (name ?? "").replace(/[\r\n"]/g, "").trim().slice(0, 78);
 }
 
 let transporter: Transporter | null = null;
@@ -48,7 +63,9 @@ export async function sendDiscountCodeEmail(
     return { success: false, error: "Email service is not configured." };
   }
 
-  const senderName = process.env.GMAIL_SENDER_NAME || "Store Discounts";
+  // Merchant override → shop name (both arrive via args) → env → generic.
+  const senderName =
+    headerSafe(args.senderName) || process.env.GMAIL_SENDER_NAME || "Store Discounts";
   const senderEmail = process.env.GMAIL_USER as string;
 
   try {

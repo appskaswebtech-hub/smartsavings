@@ -1,5 +1,6 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit } from "@remix-run/react";
+import { useIsSaving } from "../lib/useIsSaving";
 import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Checkbox, Layout, Banner } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
@@ -42,7 +43,10 @@ export default function BxgyPopup() {
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [saved, setSaved] = useState(false);
 
+  const isSaving = useIsSaving();
+
   const handleSave = () => {
+    if (isSaving) return;
     const fd = new FormData();
     fd.append("config", JSON.stringify({ enabled, headerTitle, subtitle, selectText, addToCartText, continueText, removeButton, discountBadgeType, showFreeGiftBadge, primaryColor, secondaryColor, borderColor, popupBg, headerBg, addToCartColor, saleBadgeColor, dismissBehavior, layout }));
     submit(fd, { method: "post" }); setSaved(true); setTimeout(() => setSaved(false), 3000);
@@ -87,7 +91,7 @@ export default function BxgyPopup() {
   );
 
   return (
-    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Buy X get Y pop-up" subtitle="Change pop-up text, color and behaviour." primaryAction={{ content: "Save", onAction: handleSave }}>
+    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Buy X get Y pop-up" subtitle="Change pop-up text, color and behaviour." primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: isSaving }}>
       {saved && <Box paddingBlockEnd="400"><Banner tone="success" title="Settings saved!" onDismiss={() => setSaved(false)} /></Box>}
       <Layout>
         <Layout.Section>

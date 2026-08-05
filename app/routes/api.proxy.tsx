@@ -79,6 +79,7 @@ import db from "../db.server";
 import { authenticate } from "../shopify.server";
 import { sendDiscountCodeEmail } from "../email.server";
 import { discountLabel } from "../lib/emailTemplate";
+import { getShopDisplayName } from "../lib/shopName.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
@@ -235,6 +236,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // older ones store fixed fields; the template renders whichever is present, and
   // falls back to the on-site popup text if neither exists.
   let emailContent: {
+    senderName?: string;
     blocks?: any[];
     heading?: string;
     body?: string;
@@ -251,6 +253,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     to: email,
     code: campaign.discountCode,
     campaignName: campaign.name,
+    // Merchant's own "From name" wins; otherwise the Shopify store name, which
+    // itself falls back to the shop domain.
+    senderName: emailContent.senderName?.trim() || (await getShopDisplayName(admin, shop)),
     discountLabel: discountLabel(campaign.discountType, campaign.discountValue),
     shop,
     blocks: Array.isArray(emailContent.blocks) ? emailContent.blocks : undefined,

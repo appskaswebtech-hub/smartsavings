@@ -1,5 +1,6 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit } from "@remix-run/react";
+import { useIsSaving } from "../lib/useIsSaving";
 import { Page, Card, Text, BlockStack, InlineStack, Button, Box, Checkbox, Layout, RangeSlider, Banner } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
@@ -34,14 +35,17 @@ export default function BxgyFab() {
 
   const [layout, setLayout] = useState<LayoutValue>(config?.layout ?? {});
 
+  const isSaving = useIsSaving();
+
   const handleSave = () => {
+    if (isSaving) return;
     const fd = new FormData();
     fd.append("config", JSON.stringify({ enabled, removeCloseButton, position, fabRadius, fabBg, fabIcon, closeBtnColor, closeIconColor, layout }));
     submit(fd, { method: "post" }); setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
 
   return (
-    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Buy X get Y Floating button" subtitle="Customize FAB style shown after closing pop-up." primaryAction={{ content: "Save", onAction: handleSave }}>
+    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Buy X get Y Floating button" subtitle="Customize FAB style shown after closing pop-up." primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: isSaving }}>
       {saved && <Box paddingBlockEnd="400"><Banner tone="success" title="Settings saved!" onDismiss={() => setSaved(false)} /></Box>}
       <Layout>
         <Layout.Section>

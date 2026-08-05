@@ -16,6 +16,7 @@ import {
 } from "@shopify/polaris";
 import { useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
+import { useIsSaving } from "../lib/useIsSaving";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -62,7 +63,10 @@ export default function Settings() {
   const [customCss, setCustomCss] = useState(settings.customCss);
   const [saved, setSaved] = useState(false);
 
+  const isSaving = useIsSaving();
+
   const handleSave = () => {
+    if (isSaving) return;
     const formData = new FormData();
     formData.append("roundPrices", String(roundPrices));
     formData.append("roundingMethod", roundingMethod);
@@ -84,6 +88,8 @@ export default function Settings() {
       primaryAction={{
         content: "Save",
         onAction: handleSave,
+        loading: isSaving,
+        disabled: isSaving,
       }}
     >
       <BlockStack gap="400">

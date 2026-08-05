@@ -1,5 +1,6 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit } from "@remix-run/react";
+import { useIsSaving } from "../lib/useIsSaving";
 import {
   Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Select, Layout, Banner,
 } from "@shopify/polaris";
@@ -136,7 +137,10 @@ export default function DiscountPopupCustomization() {
     setButtonAlign("center");
   };
 
+  const isSaving = useIsSaving();
+
   const handleSave = () => {
+    if (isSaving) return;
     const fd = new FormData();
     fd.append(
       "config",
@@ -229,7 +233,7 @@ export default function DiscountPopupCustomization() {
       backAction={{ content: "Customization", url: "/app/customization" }}
       title="Discount pop-up"
       subtitle="Change the email pop-up colors and style."
-      primaryAction={{ content: "Save", onAction: handleSave }}
+      primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: isSaving }}
     >
       {saved && (
         <Box paddingBlockEnd="400">

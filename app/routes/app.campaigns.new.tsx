@@ -863,7 +863,7 @@ import {
   type LoaderFunctionArgs,
   type ActionFunctionArgs,
 } from "@remix-run/node";
-import { useLoaderData, useNavigate, useSubmit, useActionData, useNavigation } from "@remix-run/react";
+import { useLoaderData, useNavigate, useSubmit, useActionData } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -887,6 +887,7 @@ import { useState } from "react";
 import { buildEmailHtml, discountLabel, newBlock, type EmailBlock } from "../lib/emailTemplate";
 import { EmailBlockEditor } from "../components/EmailBlockEditor";
 import { EmailPreview } from "../components/EmailPreview";
+import { useIsSaving } from "../lib/useIsSaving";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -1675,10 +1676,9 @@ export default function NewCampaign() {
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const submit = useSubmit();
-  // Drives the Save button's spinner. "submitting" is true only while the action
-  // runs — a plain Discard navigation is a GET ("loading"), so it won't trigger it.
-  const navigation = useNavigation();
-  const isSubmitting = navigation.state === "submitting";
+  // Drives the Save button's spinner. Held through the post-action redirect, so
+  // the button can't re-enable mid-navigation; a plain Discard GET won't trigger it.
+  const isSubmitting = useIsSaving();
 
   const [name, setName] = useState("");
   const [discountType, setDiscountType] = useState("percentage");
@@ -1727,6 +1727,8 @@ export default function NewCampaign() {
     newBlock("code"),
     newBlock("button"),
   ]);
+  // Blank = fall back to the Shopify store name when the email is sent.
+  const [emailSenderName, setEmailSenderName] = useState("");
   // Live preview, built from the same template the sender uses.
   const emailPreviewHtml = buildEmailHtml({
     code: discountCode || "SAMPLE10",
@@ -1852,6 +1854,7 @@ export default function NewCampaign() {
   // ── Form submission ──────────────────────────────────────────
 
   const handleSave = () => {
+    if (isSubmitting) return;
     const isFreeShippingCampaign =
       (type === "shipping_discount" && freeShipping) ||
       (type === "advanced_discount_code" && discountType === "free_shipping");
@@ -1946,7 +1949,10 @@ export default function NewCampaign() {
       formData.append("popupDelaySeconds", popupDelaySeconds);
       formData.append("popupFrequencyValue", popupFrequencyValue);
       formData.append("popupFrequencyUnit", popupFrequencyUnit);
-      formData.append("emailContent", JSON.stringify({ blocks: emailBlocks }));
+      formData.append(
+        "emailContent",
+        JSON.stringify({ senderName: emailSenderName.trim() || undefined, blocks: emailBlocks })
+      );
     }
 
     if (selectedProducts.length > 0) {
@@ -2666,7 +2672,12 @@ export default function NewCampaign() {
                         <Text as="p" variant="bodySm" tone="subdued">
                           The email a shopper receives with their code — separate from the popup text above. Build it from blocks.
                         </Text>
-                        <EmailBlockEditor blocks={emailBlocks} onChange={setEmailBlocks} />
+                        <EmailBlockEditor
+                          blocks={emailBlocks}
+                          onChange={setEmailBlocks}
+                          senderName={emailSenderName}
+                          onSenderNameChange={setEmailSenderName}
+                        />
                         <EmailPreview html={emailPreviewHtml} labelVariant="bodySm" labelWeight="bold" />
                       </BlockStack>
 

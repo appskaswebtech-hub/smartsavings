@@ -1,5 +1,6 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit } from "@remix-run/react";
+import { useIsSaving } from "../lib/useIsSaving";
 import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Checkbox, Layout, RangeSlider, Banner } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
@@ -55,7 +56,10 @@ export default function CountdownStart() {
   const [layout, setLayout] = useState<LayoutValue>(config?.layout ?? {});
   const [saved, setSaved] = useState(false);
 
+  const isSaving = useIsSaving();
+
   const handleSave = () => {
+    if (isSaving) return;
     const formData = new FormData();
     formData.append("config", JSON.stringify({ enabled, position, stickyBanner, alwaysVisible, removeCloseIcon, removeCtaButton, title, titleSize, timerLabels, ctaText, ctaSize, ctaUrl, makeClickable, bgType, bgColor1, bgColor2, gradientAngle, borderRadius, closeIconColor, titleColor, countdownBoxText, countdownNumber, ctaBg, ctaTextColor, layout }));
     submit(formData, { method: "post" });
@@ -83,7 +87,7 @@ export default function CountdownStart() {
   );
 
   return (
-    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Starts in countdown timer" subtitle="Set new style for starts in countdown timer." primaryAction={{ content: "Save", onAction: handleSave }}>
+    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Starts in countdown timer" subtitle="Set new style for starts in countdown timer." primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: isSaving }}>
       {saved && <Box paddingBlockEnd="400"><Banner tone="success" title="Settings saved!" onDismiss={() => setSaved(false)} /></Box>}
       <Layout>
         <Layout.Section>

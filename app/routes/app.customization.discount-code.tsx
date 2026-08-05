@@ -1,5 +1,6 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit } from "@remix-run/react";
+import { useIsSaving } from "../lib/useIsSaving";
 import {
   Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Layout, Banner,
 } from "@shopify/polaris";
@@ -76,7 +77,10 @@ export default function DiscountCodeCustomization() {
     setBorderRadius(String(DEFAULTS.borderRadius));
   };
 
+  const isSaving = useIsSaving();
+
   const handleSave = () => {
+    if (isSaving) return;
     const fd = new FormData();
     fd.append(
       "config",
@@ -133,7 +137,7 @@ export default function DiscountCodeCustomization() {
       backAction={{ content: "Customization", url: "/app/customization" }}
       title="Discount code input"
       subtitle="Change the on-store discount code box text and style."
-      primaryAction={{ content: "Save", onAction: handleSave }}
+      primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: isSaving }}
     >
       {saved && (
         <Box paddingBlockEnd="400">

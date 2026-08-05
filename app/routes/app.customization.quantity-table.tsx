@@ -1,5 +1,6 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit } from "@remix-run/react";
+import { useIsSaving } from "../lib/useIsSaving";
 import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Layout, RangeSlider, Banner } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
@@ -39,7 +40,10 @@ export default function QuantityTable() {
 
   const [layout, setLayout] = useState<LayoutValue>(config?.layout ?? {});
 
+  const isSaving = useIsSaving();
+
   const handleSave = () => {
+    if (isSaving) return;
     const fd = new FormData();
     fd.append("config", JSON.stringify({ enabled, headerTitle, buyText, getText, offText, discountFormat, perItemText, newPriceText, textColor, titleBgColor, tableTextColor, borderColor, borderRadius: borderRadiusVal, layout }));
     submit(fd, { method: "post" }); setSaved(true); setTimeout(() => setSaved(false), 3000);
@@ -62,7 +66,7 @@ export default function QuantityTable() {
   );
 
   return (
-    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Quantity & volume discount" subtitle="Change content and style of the tier table." primaryAction={{ content: "Save", onAction: handleSave }}>
+    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Quantity & volume discount" subtitle="Change content and style of the tier table." primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: isSaving }}>
       {saved && <Box paddingBlockEnd="400"><Banner tone="success" title="Settings saved!" onDismiss={() => setSaved(false)} /></Box>}
       <Layout>
         <Layout.Section>

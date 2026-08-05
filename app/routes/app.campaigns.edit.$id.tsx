@@ -2583,7 +2583,6 @@ import {
   useSubmit,
   useActionData,
   useFetcher,
-  useNavigation,
 } from "@remix-run/react";
 import {
   Page,
@@ -2606,6 +2605,7 @@ import { useState } from "react";
 import { buildEmailHtml, discountLabel, legacyToBlocks, type EmailBlock } from "../lib/emailTemplate";
 import { EmailBlockEditor } from "../components/EmailBlockEditor";
 import { EmailPreview } from "../components/EmailPreview";
+import { useIsSaving } from "../lib/useIsSaving";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -3094,7 +3094,6 @@ export default function EditCampaign() {
   const navigate = useNavigate();
   const submit = useSubmit();
   const shopify = useAppBridge();
-  const navigation = useNavigation();
   const variantFetcher = useFetcher<{ variants: any[] }>();
   const type = campaign.type;
 
@@ -3150,6 +3149,11 @@ export default function EditCampaign() {
     try { parsed = JSON.parse((campaign as any).emailContent ?? "{}"); } catch {}
     if (Array.isArray(parsed.blocks) && parsed.blocks.length > 0) return parsed.blocks as EmailBlock[];
     return legacyToBlocks(parsed);
+  });
+  // Blank = fall back to the Shopify store name when the email is sent.
+  const [emailSenderName, setEmailSenderName] = useState<string>(() => {
+    try { return JSON.parse((campaign as any).emailContent ?? "{}").senderName ?? ""; }
+    catch { return ""; }
   });
   // Live preview of the code email, built from the same template the sender uses.
   const emailPreviewHtml = buildEmailHtml({
@@ -3296,8 +3300,7 @@ export default function EditCampaign() {
         ? new Date(campaign.startDate)
         : new Date();
 
-  const isSaving =
-    navigation.state === "submitting" || navigation.state === "loading";
+  const isSaving = useIsSaving();
 
   const handleSave = () => {
     if (isSaving) return;
@@ -3368,7 +3371,10 @@ export default function EditCampaign() {
       fd.append("popupHeading", popupHeading);
       fd.append("popupBody", popupBody);
       fd.append("popupButtonText", popupButtonText);
-      fd.append("emailContent", JSON.stringify({ blocks: emailBlocks }));
+      fd.append(
+        "emailContent",
+        JSON.stringify({ senderName: emailSenderName.trim() || undefined, blocks: emailBlocks })
+      );
       fd.append("popupDelaySeconds", popupDelaySeconds);
       fd.append("popupPages", JSON.stringify(popupPageScope === "all" ? ["all"] : popupPageTypes));
     }
@@ -3403,6 +3409,7 @@ export default function EditCampaign() {
         content: isSaving ? "Updating campaign..." : "Update campaign",
         onAction: handleSave,
         loading: isSaving,
+        disabled: isSaving,
       }}
       secondaryActions={[
         { content: "Discard", onAction: () => navigate(`/app/campaigns/${campaign.id}`) },
@@ -4238,7 +4245,12 @@ export default function EditCampaign() {
                         <Text as="p" variant="bodySm" tone="subdued">
                           The email a shopper receives with their code — separate from the popup text above. Build it from blocks.
                         </Text>
-                        <EmailBlockEditor blocks={emailBlocks} onChange={setEmailBlocks} />
+                        <EmailBlockEditor
+                          blocks={emailBlocks}
+                          onChange={setEmailBlocks}
+                          senderName={emailSenderName}
+                          onSenderNameChange={setEmailSenderName}
+                        />
                         <EmailPreview html={emailPreviewHtml} />
                       </BlockStack>
                       <BlockStack gap="200">
