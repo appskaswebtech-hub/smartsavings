@@ -4,10 +4,24 @@
     "target": "cart.lines.discounts.generate.run",
     "input": {
       "cart": {
+        "cost": { "subtotalAmount": { "amount": "0.0" } },
         "lines": []
       },
       "discount": {
-        "discountClasses": ["ORDER", "PRODUCT"]
+        "discountClasses": ["PRODUCT"],
+        "metafield": {
+          "jsonValue": {
+            "version": 1,
+            "kind": "quantity_tiers",
+            "campaignName": "Tiered discount2",
+            "appliesTo": "all",
+            "productIds": [],
+            "variantIds": [],
+            "collectionIds": [],
+            "fixedPerItem": false,
+            "tiers": [{ "quantity": 3, "value": 20, "type": "percentage" }]
+          }
+        }
       }
     },
     "output": {

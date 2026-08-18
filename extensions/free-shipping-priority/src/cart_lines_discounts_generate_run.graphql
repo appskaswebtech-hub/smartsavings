@@ -1,15 +1,33 @@
-query CartInput {
+# $collectionIds is populated from the `collectionIds` key of the config
+# metafield declared in [extensions.input.variables] (shopify.extension.toml).
+# The `= []` default matters: a SHIPPING discount has no such metafield, so the
+# variable resolves to null and would otherwise be illegal in a non-null position.
+query CartInput($collectionIds: [ID!]! = []) {
   cart {
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
     lines {
       id
-      cost {
-        subtotalAmount {
-          amount
+      quantity
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          product {
+            id
+            inCampaignCollection: inAnyCollection(ids: $collectionIds)
+          }
         }
       }
     }
   }
   discount {
     discountClasses
+    metafield(namespace: "$app:smartsavings", key: "config") {
+      jsonValue
+    }
   }
 }

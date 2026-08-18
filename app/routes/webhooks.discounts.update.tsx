@@ -35,10 +35,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return new Response("OK", { status: 200 });
       }
 
-      // Check tiered discounts (title starts with campaign name)
+      // Fallback for LEGACY per-tier discounts, titled "CampaignName (Buy X+ …)".
+      // This previously only checked a " - " separator, which was never the shape
+      // those titles used, so tiered campaigns never picked up status changes.
+      //
+      // Tiered campaigns on the current scheme are a single discount titled
+      // exactly the campaign name, so the exact-match branch above handles them.
       const allCampaigns = await db.campaign.findMany({ where: { shop } });
       for (const campaign of allCampaigns) {
-        if (discountTitle.startsWith(campaign.name + " - ")) {
+        if (
+          discountTitle.startsWith(campaign.name + " (") ||
+          discountTitle.startsWith(campaign.name + " - ")
+        ) {
           await db.campaign.update({
             where: { id: campaign.id },
             data: { status: newStatus },

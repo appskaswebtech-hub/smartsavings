@@ -1,0 +1,73 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": { "subtotalAmount": { "amount": "10237.42" } },
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 8,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/20",
+              "product": {
+                "id": "gid://shopify/Product/200",
+                "inCampaignCollection": false
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 6,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/10",
+              "product": {
+                "id": "gid://shopify/Product/100",
+                "inCampaignCollection": false
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["PRODUCT"],
+        "metafield": {
+          "jsonValue": {
+            "version": 1,
+            "kind": "quantity_tiers",
+            "campaignName": "Tiered discount2",
+            "appliesTo": "specific_products",
+            "productIds": ["100"],
+            "variantIds": [],
+            "collectionIds": [],
+            "fixedPerItem": true,
+            "tiers": [
+              { "quantity": 3, "value": 20, "type": "percentage" },
+              { "quantity": 6, "value": 25, "type": "percentage" },
+              { "quantity": 9, "value": 30, "type": "percentage" }
+            ]
+          }
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "productDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Tiered discount2 — Buy 6+ Save 25%",
+                "targets": [{ "cartLine": { "id": "gid://shopify/CartLine/1" } }],
+                "value": { "percentage": { "value": 25.0 } }
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}

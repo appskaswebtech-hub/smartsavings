@@ -8,12 +8,17 @@
  * matching the server-side filter in discount.server.ts):
  *   1. At least one valid tier.
  *   2. No two tiers share the same threshold (Buy quantity / min cart value).
- *   3. At most 25 tiers — Shopify allows 25 automatic discounts per store and
- *      each tier becomes one automatic discount.
+ *   3. At most MAX_FUNCTION_TIERS tiers.
  */
 
-// Shopify's hard cap on automatic discounts per store. One tier = one discount.
-export const MAX_TIERS = 25;
+/**
+ * quantity_discount and cart_goal are each ONE function-backed discount whose
+ * tiers live in a config metafield. That replaced one native automatic discount
+ * per tier, so Shopify's cap of 25 automatic discounts per store no longer sets
+ * the ceiling — this cap exists only to keep the config metafield inside Shopify
+ * Function input limits and the tier table usable.
+ */
+export const MAX_FUNCTION_TIERS = 50;
 
 export interface TierRow {
   quantity?: string;
@@ -26,6 +31,7 @@ export function validateTiers(
   thresholdKey: "quantity" | "amount",
   // Human-readable name of the threshold, e.g. "Buy quantity" | "minimum cart value".
   thresholdLabel: string,
+  maxTiers: number = MAX_FUNCTION_TIERS,
 ): string | null {
   // Numeric comparison, not truthiness: the fields are strings and "0" is truthy.
   const valid = rows.filter((r) => {
@@ -47,8 +53,8 @@ export function validateTiers(
     seen.add(threshold);
   }
 
-  if (valid.length > MAX_TIERS) {
-    return `Shopify allows up to ${MAX_TIERS} automatic discounts. Reduce this campaign to ${MAX_TIERS} tiers or fewer.`;
+  if (valid.length > maxTiers) {
+    return `This campaign supports up to ${maxTiers} tiers. Remove ${valid.length - maxTiers}.`;
   }
 
   return null;
@@ -63,12 +69,13 @@ export interface CartGoalTierRow {
 
 /**
  * Validation for cart-goal tiers, where each tier picks its own requirement type
- * and may gate on an order value, a quantity, or both. Mirrors the per-tier logic
- * in discount.server.ts, including that an "either" tier with both thresholds set
- * produces TWO Shopify discounts (so it counts double against the 25 cap).
+ * and may gate on an order value, a quantity, or both. Mirrors the per-tier
+ * filter in discount.server.ts.
+ *
+ * A cart-goal campaign is now a single function-backed discount, so every tier —
+ * including "either", which used to need two native discounts — counts once.
  */
 export function validateCartGoalTiers(rows: CartGoalTierRow[]): string | null {
-  let discountCount = 0;
   let validTiers = 0;
 
   for (const r of rows) {
@@ -89,15 +96,13 @@ export function validateCartGoalTiers(rows: CartGoalTierRow[]): string | null {
     if (!ok) continue;
 
     validTiers += 1;
-    // "either" with both thresholds present becomes two discounts; everything else is one.
-    discountCount += req === "either" && hasAmount && hasQty ? 2 : 1;
   }
 
   if (validTiers === 0) {
     return "Add at least one tier with a discount and its required minimum(s) filled in.";
   }
-  if (discountCount > MAX_TIERS) {
-    return `Shopify allows up to ${MAX_TIERS} automatic discounts. This campaign would create ${discountCount} — reduce the number of tiers (note “or” tiers count as two).`;
+  if (validTiers > MAX_FUNCTION_TIERS) {
+    return `This campaign supports up to ${MAX_FUNCTION_TIERS} tiers. Remove ${validTiers - MAX_FUNCTION_TIERS}.`;
   }
   return null;
 }

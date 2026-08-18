@@ -1,0 +1,63 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": { "subtotalAmount": { "amount": "7087.60" } },
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 8,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/20",
+              "product": {
+                "id": "gid://shopify/Product/200",
+                "inCampaignCollection": false
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["PRODUCT"],
+        "metafield": {
+          "jsonValue": {
+            "version": 1,
+            "kind": "quantity_tiers",
+            "campaignName": "Videographer deal",
+            "appliesTo": "specific_products",
+            "productIds": ["200"],
+            "variantIds": [],
+            "collectionIds": [],
+            "fixedPerItem": true,
+            "tiers": [
+              { "quantity": 2, "value": 5, "type": "fixed_amount" },
+              { "quantity": 4, "value": 10, "type": "fixed_amount" },
+              { "quantity": 8, "value": 15, "type": "fixed_amount" }
+            ]
+          }
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "productDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Videographer deal — Buy 8+ Save $15",
+                "targets": [{ "cartLine": { "id": "gid://shopify/CartLine/0" } }],
+                "value": {
+                  "fixedAmount": { "amount": 15.0, "appliesToEachItem": true }
+                }
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}

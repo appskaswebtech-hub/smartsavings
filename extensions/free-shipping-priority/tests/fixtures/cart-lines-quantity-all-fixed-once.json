@@ -1,0 +1,87 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": { "subtotalAmount": { "amount": "300.0" } },
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/10",
+              "product": {
+                "id": "gid://shopify/Product/100",
+                "inCampaignCollection": false
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/20",
+              "product": {
+                "id": "gid://shopify/Product/200",
+                "inCampaignCollection": false
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/30",
+              "product": {
+                "id": "gid://shopify/Product/300",
+                "inCampaignCollection": false
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["PRODUCT"],
+        "metafield": {
+          "jsonValue": {
+            "version": 1,
+            "kind": "quantity_tiers",
+            "campaignName": "Storewide bulk",
+            "appliesTo": "all",
+            "productIds": [],
+            "variantIds": [],
+            "collectionIds": [],
+            "fixedPerItem": false,
+            "tiers": [{ "quantity": 3, "value": 5, "type": "fixed_amount" }]
+          }
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "productDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Storewide bulk — Buy 3+ Save $5",
+                "targets": [
+                  { "cartLine": { "id": "gid://shopify/CartLine/0" } },
+                  { "cartLine": { "id": "gid://shopify/CartLine/1" } },
+                  { "cartLine": { "id": "gid://shopify/CartLine/2" } }
+                ],
+                "value": {
+                  "fixedAmount": { "amount": 5.0, "appliesToEachItem": false }
+                }
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}

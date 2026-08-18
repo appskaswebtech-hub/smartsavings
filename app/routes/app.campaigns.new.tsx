@@ -33,7 +33,7 @@ import { useIsSaving } from "../lib/useIsSaving";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { createShopifyDiscount } from "../discount.server";
+import { createShopifyDiscount, deleteShopifyDiscountsByIds } from "../discount.server";
 import { validateTiers, validateCartGoalTiers } from "../lib/validateTiers";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
@@ -196,6 +196,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     if (!shopifyResult.success && shopifyResult.errors?.length) {
+      // A campaign can create several discounts and fail partway through. Nothing
+      // is saved locally on this path, so anything already created would be
+      // orphaned in Shopify with no campaign to manage it — mirror the rollback
+      // the edit route does.
+      if (shopifyResult.createdIds?.length) {
+        await deleteShopifyDiscountsByIds(admin, shopifyResult.createdIds);
+      }
       const errorMsg = shopifyResult.errors.map((e: any) => e.message || e).join(", ");
       return json({ success: false, error: `Shopify error: ${errorMsg}` });
     }
@@ -219,6 +226,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         productIds: productIds || null,
         collectionIds: collectionIds || null,
         discountCode: discountCode || null,
+        // Without this, every newly created campaign has to be matched to its
+        // Shopify discount by title alone, which breaks for names that are a
+        // prefix of another campaign's.
+        shopifyDiscountId: shopifyResult.createdIds?.[0] ?? null,
         popupEnabled,
         popupPages: popupEnabled ? popupPagesRaw || null : null,
         popupHeading: popupEnabled ? popupHeading : null,

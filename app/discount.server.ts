@@ -316,7 +316,17 @@ interface CampaignData {
   endDate: Date | null;
   tiers: string | null;
   productIds: string | null;
+  // The create page posts variants separately; the edit page folds them into
+  // productIds instead. Both are accepted so the two pages agree.
+  variantIds?: string | null;
   collectionIds: string | null;
+  // Persisted per campaign and surfaced in the edit form. Default true: quantity
+  // tiers evaluate their whole tier set inside the function, so a campaign can
+  // never stack with itself, and combining is what lets two campaigns discount
+  // different products in the same cart.
+  combineWithProducts?: boolean;
+  combineWithOrders?: boolean;
+  combineWithShipping?: boolean;
   freeShipping: boolean;
   minOrderForShipping: string | null;
   minQuantityForShipping?: string | null;
@@ -397,13 +407,68 @@ function numericProductIds(productIdsJson: string | null): string[] {
 }
 
 /**
- * Look up the deployed Shopify Function for this app that targets
- * cart.delivery-options.discounts.generate.run. Used for specific-products
- * free shipping campaigns so we can route them through our strict rule.
+ * The campaign edit page folds selected VARIANT gids into productIds (replacing
+ * the product gid), so that array is a mix of gid://shopify/Product/N and
+ * gid://shopify/ProductVariant/N. numericProductIds() strips the gid type along
+ * with the prefix, which is exactly the information the function needs to tell a
+ * variant-scoped target from a product-scoped one — so split first, then strip.
+ */
+function splitProductAndVariantIds(productIdsJson: string | null): {
+  productIds: string[];
+  variantIds: string[];
+} {
+  const productIds: string[] = [];
+  const variantIds: string[] = [];
+  if (!productIdsJson) return { productIds, variantIds };
+
+  let arr: unknown;
+  try {
+    arr = JSON.parse(productIdsJson);
+  } catch {
+    return { productIds, variantIds };
+  }
+  if (!Array.isArray(arr)) return { productIds, variantIds };
+
+  for (const raw of arr) {
+    if (typeof raw !== "string") continue;
+    const m = raw.match(/\/(\d+)$/);
+    const numeric = m ? m[1] : raw;
+    if (raw.includes("/ProductVariant/")) variantIds.push(numeric);
+    else productIds.push(numeric);
+  }
+  return { productIds, variantIds };
+}
+
+function parseGidArray(json: string | null): string[] {
+  if (!json) return [];
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr.filter((x: any) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Look up this app's deployed discount Function.
+ *
+ * ONE extension ("free-shipping-priority") registers BOTH the cart.lines and the
+ * cart.delivery-options targets, so the same function id backs the SHIPPING, the
+ * PRODUCT and the ORDER discounts — shopifyFunctions returns a single node for it.
+ * Older per-target deployments returned one node per apiType, so callers pass the
+ * apiTypes they'd prefer (best first) rather than us assuming there's only one.
+ *
+ * Matching is on `title`, which resolves from "name" in the extension's
+ * locales/en.default.json. Do NOT rename that key without updating this matcher —
+ * a miss here degrades silently into "function not found" for every
+ * function-backed campaign.
  *
  * Returns the function id (e.g. "01H...") or null if not found.
  */
-async function findFreeShippingFunctionId(admin: AdminApiContext): Promise<string | null> {
+async function findDiscountFunctionId(
+  admin: AdminApiContext,
+  preferredApiTypes: string[] = []
+): Promise<string | null> {
   try {
     const r = await admin.graphql(
       `#graphql
@@ -420,16 +485,25 @@ async function findFreeShippingFunctionId(admin: AdminApiContext): Promise<strin
     );
     const data = await r.json();
     const nodes = data?.data?.shopifyFunctions?.nodes || [];
-    // Filter for discount-class functions; the title we registered is
-    // "free-shipping-priority" (from shopify.extension.toml).
-    const match = nodes.find((n: any) =>
+    const matches = nodes.filter((n: any) =>
       n.title === "free-shipping-priority" || n.title?.includes("free-shipping")
     );
-    return match?.id || null;
+    if (matches.length === 0) return null;
+    if (matches.length === 1) return matches[0].id;
+
+    for (const apiType of preferredApiTypes) {
+      const hit = matches.find((n: any) => n.apiType === apiType);
+      if (hit) return hit.id;
+    }
+    return matches[0].id;
   } catch (e) {
-    console.error("findFreeShippingFunctionId error:", e);
+    console.error("findDiscountFunctionId error:", e);
     return null;
   }
+}
+
+async function findFreeShippingFunctionId(admin: AdminApiContext): Promise<string | null> {
+  return findDiscountFunctionId(admin, ["discount", "shipping_discounts"]);
 }
 
 /**
@@ -538,6 +612,294 @@ async function createSpecificFreeShipping(
   return discountId;
 }
 
+// ─── Function-backed tiered discounts ───────────────────────────────────────
+// quantity_discount and cart_goal are ONE app discount per campaign, with the
+// tier table in a metafield, instead of one native discount per tier.
+//
+// Per-tier native discounts had to set combinesWith.productDiscounts: false to
+// stop a campaign's own tiers stacking (at qty 8 the 2+, 4+ and 8+ discounts
+// would all apply). That flag also stopped two DIFFERENT campaigns from ever
+// discounting the same cart: Shopify applies one automatic product discount
+// unless all of them opt into combining, so the second campaign was silently
+// dropped. The function evaluates the whole tier set and awards only the winning
+// tier, so combining is safe to turn on and both campaigns apply.
+
+const TIERS_NAMESPACE = "$app:smartsavings";
+const TIERS_KEY = "config";
+// Function input has practical size limits well below the JSON metafield cap.
+const MAX_TARGET_IDS = 500;
+// Documented ceiling for a GraphQL list used as an input-query variable.
+const MAX_COLLECTION_IDS = 100;
+
+function combinesWithFor(campaign: CampaignData) {
+  return {
+    productDiscounts: campaign.combineWithProducts ?? true,
+    orderDiscounts: campaign.combineWithOrders ?? true,
+    shippingDiscounts: campaign.combineWithShipping ?? true,
+  };
+}
+
+/**
+ * Create a function-backed app discount and attach its config metafield.
+ * Returns the discount node id, or null on failure.
+ */
+async function createFunctionDiscount(
+  admin: AdminApiContext,
+  campaign: CampaignData,
+  discountClass: "PRODUCT" | "ORDER",
+  config: Record<string, unknown>,
+  startsAt: string,
+  endsAt: string | null,
+  errors: string[]
+): Promise<string | null> {
+  const functionId = await findDiscountFunctionId(admin, ["discount", "product_discounts"]);
+  if (!functionId) {
+    errors.push(
+      "Discount function not found. Deploy the extension with `npm run deploy`."
+    );
+    return null;
+  }
+
+  const createResult = await runMutation(
+    admin,
+    `#graphql
+    mutation create($discount: DiscountAutomaticAppInput!) {
+      discountAutomaticAppCreate(automaticAppDiscount: $discount) {
+        automaticAppDiscount { discountId }
+        userErrors { field message }
+      }
+    }`,
+    {
+      discount: {
+        title: campaign.name,
+        functionId,
+        startsAt,
+        endsAt,
+        discountClasses: [discountClass],
+        combinesWith: combinesWithFor(campaign),
+      },
+    }
+  );
+
+  const ue = createResult.data?.discountAutomaticAppCreate?.userErrors || [];
+  if (ue.length) {
+    errors.push(...ue.map((e: any) => e.message));
+    return null;
+  }
+
+  const discountId =
+    createResult.data?.discountAutomaticAppCreate?.automaticAppDiscount?.discountId;
+  if (!discountId) {
+    errors.push("Function discount creation returned no id.");
+    return null;
+  }
+
+  // The config is also the source of the $collectionIds input-query variable
+  // (see [extensions.input.variables] in shopify.extension.toml), so
+  // collectionIds must stay a TOP-LEVEL key holding full GIDs. productIds and
+  // variantIds are numeric and are matched inside the function instead.
+  const metafieldResult = await runMutation(
+    admin,
+    `#graphql
+    mutation setMeta($metafields: [MetafieldsSetInput!]!) {
+      metafieldsSet(metafields: $metafields) {
+        metafields { id }
+        userErrors { field message }
+      }
+    }`,
+    {
+      metafields: [
+        {
+          ownerId: discountId,
+          namespace: TIERS_NAMESPACE,
+          key: TIERS_KEY,
+          type: "json",
+          value: JSON.stringify(config),
+        },
+      ],
+    }
+  );
+
+  const mfe = metafieldResult.data?.metafieldsSet?.userErrors || [];
+  if (mfe.length) {
+    errors.push(
+      "Discount created but config attach failed: " +
+        mfe.map((e: any) => e.message).join(", ")
+    );
+    // Return the id anyway so the caller can roll it back. Without the config
+    // the function's validation bails, so the live discount is inert rather
+    // than wrong — but it still occupies one of the store's discount slots.
+    return discountId;
+  }
+
+  return discountId;
+}
+
+function parseQuantityTiers(tiersJson: string | null) {
+  if (!tiersJson) return [];
+  try {
+    return JSON.parse(tiersJson)
+      .map((t: any) => ({
+        quantity: parseInt(t.quantity, 10),
+        value: parseFloat(t.discount),
+        type: t.discountType === "fixed_amount" ? "fixed_amount" : "percentage",
+      }))
+      // Zero rows are kept in the DB as placeholders but are not valid tiers.
+      .filter(
+        (t: any) => !isNaN(t.quantity) && !isNaN(t.value) && t.quantity > 0 && t.value > 0
+      )
+      .sort((a: any, b: any) => a.quantity - b.quantity);
+  } catch {
+    return [];
+  }
+}
+
+async function createQuantityTierDiscount(
+  admin: AdminApiContext,
+  campaign: CampaignData,
+  startsAt: string,
+  endsAt: string | null,
+  errors: string[]
+): Promise<string | null> {
+  const tiers = parseQuantityTiers(campaign.tiers);
+  if (tiers.length === 0) {
+    errors.push("Add at least one tier with a quantity and a discount greater than 0.");
+    return null;
+  }
+
+  const { productIds, variantIds } = splitProductAndVariantIds(campaign.productIds);
+  // The create page posts variants in their own field, the edit page folds them
+  // into productIds. Merge both so either entry point produces the same config.
+  const allVariantIds = Array.from(
+    new Set([...variantIds, ...numericProductIds(campaign.variantIds ?? null)])
+  );
+  const collectionIds = parseGidArray(campaign.collectionIds);
+
+  const appliesTo =
+    campaign.appliesTo === "specific_products" ||
+    campaign.appliesTo === "specific_collections"
+      ? campaign.appliesTo
+      : "all";
+
+  // getItemsFilter() falls back to { all: true } when the id list is empty or
+  // unparseable. Under the function that would discount the entire catalogue,
+  // so fail loudly instead of silently widening the campaign.
+  if (appliesTo === "specific_products" && productIds.length + allVariantIds.length === 0) {
+    errors.push("Select at least one product for this quantity discount.");
+    return null;
+  }
+  if (appliesTo === "specific_collections" && collectionIds.length === 0) {
+    errors.push("Select at least one collection for this quantity discount.");
+    return null;
+  }
+  if (productIds.length + allVariantIds.length > MAX_TARGET_IDS) {
+    errors.push(
+      `A quantity discount can target at most ${MAX_TARGET_IDS} products or variants.`
+    );
+    return null;
+  }
+  if (collectionIds.length > MAX_COLLECTION_IDS) {
+    errors.push(
+      `A quantity discount can target at most ${MAX_COLLECTION_IDS} collections.`
+    );
+    return null;
+  }
+
+  return createFunctionDiscount(
+    admin,
+    campaign,
+    "PRODUCT",
+    {
+      version: 1,
+      kind: "quantity_tiers",
+      campaignName: campaign.name,
+      appliesTo,
+      productIds,
+      variantIds: allVariantIds,
+      collectionIds,
+      // Mirrors the native rule `appliesOnEachItem: !targetsAllItems`: a fixed
+      // amount comes off each unit when specific items are targeted, and once
+      // across the entitled items when the campaign targets everything.
+      fixedPerItem: appliesTo !== "all",
+      tiers,
+    },
+    startsAt,
+    endsAt,
+    errors
+  );
+}
+
+function parseCartGoalTiers(tiersJson: string | null) {
+  if (!tiersJson) return [];
+  try {
+    return JSON.parse(tiersJson)
+      .map((t: any) => ({
+        requirementType: ["amount", "quantity", "both", "either"].includes(t.requirementType)
+          ? t.requirementType
+          : "amount",
+        amount: parseFloat(t.amount),
+        quantity: parseInt(t.quantity, 10),
+        value: parseFloat(t.discount),
+        type: t.discountType === "fixed_amount" ? "fixed_amount" : "percentage",
+      }))
+      // Zero placeholders stay saved but aren't sent. A tier needs a discount
+      // plus whichever threshold(s) its requirement type gates on.
+      .filter((t: any) => {
+        if (isNaN(t.value) || t.value <= 0) return false;
+        const hasAmount = !isNaN(t.amount) && t.amount > 0;
+        const hasQty = !isNaN(t.quantity) && t.quantity > 0;
+        if (t.requirementType === "quantity") return hasQty;
+        if (t.requirementType === "both") return hasAmount && hasQty;
+        if (t.requirementType === "either") return hasAmount || hasQty;
+        return hasAmount; // amount
+      })
+      // The function reads amount and quantity on every tier, so normalise the
+      // unused half of a single-requirement tier to 0 rather than NaN — NaN
+      // doesn't survive JSON.stringify and would fail the function's validation.
+      .map((t: any) => ({
+        ...t,
+        amount: isNaN(t.amount) ? 0 : t.amount,
+        quantity: isNaN(t.quantity) ? 0 : t.quantity,
+      }))
+      .sort(
+        (a: any, b: any) =>
+          (a.amount || 0) - (b.amount || 0) || (a.quantity || 0) - (b.quantity || 0)
+      );
+  } catch {
+    return [];
+  }
+}
+
+async function createCartGoalDiscount(
+  admin: AdminApiContext,
+  campaign: CampaignData,
+  startsAt: string,
+  endsAt: string | null,
+  errors: string[]
+): Promise<string | null> {
+  const tiers = parseCartGoalTiers(campaign.tiers);
+  if (tiers.length === 0) {
+    errors.push("Add at least one tier with a discount and its required minimum(s).");
+    return null;
+  }
+
+  return createFunctionDiscount(
+    admin,
+    campaign,
+    "ORDER",
+    {
+      version: 1,
+      kind: "cart_goal",
+      campaignName: campaign.name,
+      collectionIds: [],
+      tiers,
+    },
+    startsAt,
+    endsAt,
+    errors
+  );
+}
+
 export async function createShopifyDiscount(admin: AdminApiContext, campaign: CampaignData) {
   const startsAt = campaign.startDate.toISOString();
   const endsAt = campaign.endDate ? campaign.endDate.toISOString() : null;
@@ -578,144 +940,22 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
     }
 
     // ─── QUANTITY DISCOUNT ───
+    // One function-backed PRODUCT discount per campaign; the tier table lives in
+    // a metafield. See createQuantityTierDiscount for why this is no longer one
+    // native discount per tier.
     else if (campaign.type === "quantity_discount" && campaign.tiers) {
-      // Tiers carry their own discountType (set campaign-wide by the admin form).
-      // Anything unrecognised falls back to percentage — the historical behaviour.
-      const targetsAllItemsQty = "all" in items;
-      const tiers = JSON.parse(campaign.tiers)
-        .map((t: any) => ({
-          quantity: parseInt(t.quantity),
-          discount: parseFloat(t.discount),
-          discountType: t.discountType === "fixed_amount" ? "fixed_amount" : "percentage",
-        }))
-        // Zero rows are kept in the DB as placeholders but are not valid discounts:
-        // Shopify rejects a 0 minimum quantity and a 0 value independently, so a
-        // tier needs both halves before it's worth sending.
-        .filter((t: any) => !isNaN(t.quantity) && !isNaN(t.discount) && t.quantity > 0 && t.discount > 0)
-        .sort((a: any, b: any) => a.quantity - b.quantity);
-
-      for (const tier of tiers) {
-        const isFixed = tier.discountType === "fixed_amount";
-        const tierValue = isFixed
-          ? {
-              discountAmount: {
-                amount: String(tier.discount),
-                // Only legal as true when specific items are targeted.
-                appliesOnEachItem: !targetsAllItemsQty,
-              },
-            }
-          : { percentage: tier.discount / 100 };
-        // The title is both merchant-facing and what findMatchingDiscountIds
-        // title-matches on when replacing discounts — keep the "name (…)" shape.
-        const tierLabel = isFixed ? `Save $${tier.discount}` : `Save ${tier.discount}%`;
-
-        const result = await runMutation(admin,
-          `#graphql
-          mutation create($discount: DiscountAutomaticBasicInput!) {
-            discountAutomaticBasicCreate(automaticBasicDiscount: $discount) {
-              automaticDiscountNode { id }
-              userErrors { field message }
-            }
-          }`,
-          {
-            discount: {
-              title: `${campaign.name} (Buy ${tier.quantity}+ ${tierLabel})`,
-              startsAt, endsAt,
-              minimumRequirement: { quantity: { greaterThanOrEqualToQuantity: String(tier.quantity) } },
-              customerGets: { value: tierValue, items },
-              combinesWith: { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true },
-            },
-          }
-        );
-        const ue = result.data?.discountAutomaticBasicCreate?.userErrors || [];
-        if (ue.length) errors.push(...ue.map((e: any) => `Buy ${tier.quantity}+: ${e.message}`));
-        else createdIds.push(result.data?.discountAutomaticBasicCreate?.automaticDiscountNode?.id);
-      }
+      const id = await createQuantityTierDiscount(admin, campaign, startsAt, endsAt, errors);
+      if (id) createdIds.push(id);
     }
 
     // ─── CART GOAL ───
-    // Each tier carries its own requirementType (amount | quantity | both | either).
-    // Same Shopify one-of constraint as shipping: a single automatic discount can
-    // require subtotal OR quantity, never both. So per tier:
-    //   amount    → 1 discount, subtotal minimum
-    //   quantity  → 1 discount, quantity minimum
-    //   either    → 2 discounts (subtotal + quantity)
-    //   both      → 1 discount, subtotal minimum (quantity display-only — native
-    //               can't AND two requirement types; the Function would be needed)
+    // One function-backed ORDER discount per campaign. Native discounts could
+    // only require a subtotal OR a quantity, so an "either" tier needed two
+    // discounts and a "both" tier silently degraded to subtotal-only. The
+    // function evaluates each tier's requirement properly.
     else if (campaign.type === "cart_goal" && campaign.tiers) {
-      const tiers = JSON.parse(campaign.tiers)
-        .map((t: any) => ({
-          requirementType: ["amount", "quantity", "both", "either"].includes(t.requirementType)
-            ? t.requirementType
-            : "amount",
-          amount: parseFloat(t.amount),
-          quantity: parseInt(t.quantity, 10),
-          discount: parseFloat(t.discount),
-          discountType: t.discountType === "fixed_amount" ? "fixed_amount" : "percentage",
-        }))
-        // Zero placeholders stay saved but aren't sent. A tier needs a discount plus
-        // whichever threshold(s) its requirement type gates on.
-        .filter((t: any) => {
-          if (isNaN(t.discount) || t.discount <= 0) return false;
-          const hasAmount = !isNaN(t.amount) && t.amount > 0;
-          const hasQty = !isNaN(t.quantity) && t.quantity > 0;
-          if (t.requirementType === "quantity") return hasQty;
-          if (t.requirementType === "both") return hasAmount && hasQty;
-          if (t.requirementType === "either") return hasAmount || hasQty;
-          return hasAmount; // amount
-        })
-        .sort((a: any, b: any) => (a.amount || 0) - (b.amount || 0) || (a.quantity || 0) - (b.quantity || 0));
-
-      for (const tier of tiers) {
-        const isFixed = tier.discountType === "fixed_amount";
-        // items is hardcoded to { all: true } below, so appliesOnEachItem must be false.
-        const tierValue = isFixed
-          ? { discountAmount: { amount: String(tier.discount), appliesOnEachItem: false } }
-          : { percentage: tier.discount / 100 };
-        const valueLabel = isFixed ? `Save $${tier.discount}` : `Save ${tier.discount}%`;
-
-        const hasAmount = !isNaN(tier.amount) && tier.amount > 0;
-        const hasQty = !isNaN(tier.quantity) && tier.quantity > 0;
-        const amountSpec = {
-          title: `${campaign.name} (Spend $${tier.amount}+ ${valueLabel})`,
-          minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: String(tier.amount) } },
-        };
-        const qtySpec = {
-          title: `${campaign.name} (Buy ${tier.quantity}+ ${valueLabel})`,
-          minimumRequirement: { quantity: { greaterThanOrEqualToQuantity: String(tier.quantity) } },
-        };
-
-        const specs: { title: string; minimumRequirement: any }[] = [];
-        if (tier.requirementType === "quantity") specs.push(qtySpec);
-        else if (tier.requirementType === "either") {
-          if (hasAmount) specs.push(amountSpec);
-          if (hasQty) specs.push(qtySpec);
-        } else specs.push(amountSpec); // amount and both gate on subtotal
-
-        for (const spec of specs) {
-          const result = await runMutation(admin,
-            `#graphql
-            mutation create($discount: DiscountAutomaticBasicInput!) {
-              discountAutomaticBasicCreate(automaticBasicDiscount: $discount) {
-                automaticDiscountNode { id }
-                userErrors { field message }
-              }
-            }`,
-            {
-              discount: {
-                title: spec.title,
-                startsAt, endsAt,
-                minimumRequirement: spec.minimumRequirement,
-                customerGets: { value: tierValue, items: { all: true } },
-                combinesWith: { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true },
-              },
-            }
-          );
-          const ue = result.data?.discountAutomaticBasicCreate?.userErrors || [];
-          if (ue.length) errors.push(...ue.map((e: any) => `${spec.title}: ${e.message}`));
-          else createdIds.push(result.data?.discountAutomaticBasicCreate?.automaticDiscountNode?.id);
-        }
-      }
+      const id = await createCartGoalDiscount(admin, campaign, startsAt, endsAt, errors);
+      if (id) createdIds.push(id);
     }
 
     // ─── SHIPPING DISCOUNT ───
@@ -884,6 +1124,62 @@ export async function createShopifyDiscount(admin: AdminApiContext, campaign: Ca
     console.error("createShopifyDiscount error:", error);
     return { success: false, errors: [String(error)], createdIds: [] };
   }
+}
+
+// Returns the ids of every Shopify discount belonging to a campaign, matching on
+// title: the campaign name itself, plus the "name (…)" / "name - …" shapes older
+// per-tier discounts used. Read-only — it does NOT delete anything.
+//
+// Must be called BEFORE creating any replacement discount with the same name:
+// querying by title-prefix AFTER creation would also match the brand-new
+// discounts and delete them along with the old ones. Callers should snapshot
+// these ids first, then delete them explicitly once replacements are confirmed.
+//
+// Does NOT catch its own errors — a failed lookup must not be confused with "no
+// matching discounts exist". Swallowing it previously made callers skip deletion
+// silently; callers should catch and surface the failure to the merchant.
+export async function findMatchingDiscountIds(
+  admin: AdminApiContext,
+  campaignName: string
+): Promise<string[]> {
+  const res = await admin.graphql(
+    `#graphql
+    query {
+      discountNodes(first: 250) {
+        nodes {
+          id
+          discount {
+            __typename
+            ... on DiscountAutomaticBasic { title }
+            ... on DiscountAutomaticApp { title }
+            ... on DiscountAutomaticBxgy { title }
+            ... on DiscountAutomaticFreeShipping { title }
+            ... on DiscountCodeBasic { title }
+            ... on DiscountCodeFreeShipping { title }
+          }
+        }
+      }
+    }`
+  );
+
+  const data: any = await res.json();
+  if (data?.errors) {
+    throw new Error(
+      `findMatchingDiscountIds GraphQL error for "${campaignName}": ${JSON.stringify(data.errors)}`
+    );
+  }
+  const nodes = data?.data?.discountNodes?.nodes || [];
+
+  return nodes
+    .filter((n: any) => {
+      const t = n.discount?.title || "";
+      return (
+        t === campaignName ||
+        t.startsWith(campaignName + " (") ||
+        t.startsWith(campaignName + " - ")
+      );
+    })
+    .map((n: any) => n.id);
 }
 
 // Code discounts and automatic discounts are deleted by different mutations, so

@@ -1,0 +1,72 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": { "subtotalAmount": { "amount": "900.0" } },
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 5,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/10",
+              "product": {
+                "id": "gid://shopify/Product/100",
+                "inCampaignCollection": true
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 9,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/20",
+              "product": {
+                "id": "gid://shopify/Product/200",
+                "inCampaignCollection": false
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["PRODUCT"],
+        "metafield": {
+          "jsonValue": {
+            "version": 1,
+            "kind": "quantity_tiers",
+            "campaignName": "Snowboard collection",
+            "appliesTo": "specific_collections",
+            "productIds": [],
+            "variantIds": [],
+            "collectionIds": ["gid://shopify/Collection/900"],
+            "fixedPerItem": true,
+            "tiers": [
+              { "quantity": 3, "value": 20, "type": "percentage" },
+              { "quantity": 6, "value": 25, "type": "percentage" }
+            ]
+          }
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "productDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Snowboard collection — Buy 3+ Save 20%",
+                "targets": [{ "cartLine": { "id": "gid://shopify/CartLine/0" } }],
+                "value": { "percentage": { "value": 20.0 } }
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}

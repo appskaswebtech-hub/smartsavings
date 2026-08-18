@@ -4,12 +4,28 @@
     "target": "cart.delivery-options.discounts.generate.run",
     "input": {
       "discount": {
-        "discountClasses": ["SHIPPING"]
+        "discountClasses": ["SHIPPING"],
+        "metafield": {
+          "jsonValue": {
+            "productIds": ["100"],
+            "minimumAmount": 2000
+          }
+        }
       },
       "cart": {
+        "cost": { "subtotalAmount": { "amount": "2500.0" } },
         "deliveryGroups": [
           {
             "id": "gid://shopify/CartDeliveryGroup/1"
+          }
+        ],
+        "lines": [
+          {
+            "cost": { "subtotalAmount": { "amount": "2500.0" } },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "product": { "id": "gid://shopify/Product/100" }
+            }
           }
         ]
       }
@@ -20,7 +36,7 @@
           "deliveryDiscountsAdd": {
             "candidates": [
               {
-                "message": "FREE DELIVERY",
+                "message": "Free shipping on qualifying products",
                 "targets": [
                   {
                     "deliveryGroup": {

@@ -4,11 +4,11 @@
     "target": "cart.lines.discounts.generate.run",
     "input": {
       "cart": {
-        "cost": { "subtotalAmount": { "amount": "600.0" } },
+        "cost": { "subtotalAmount": { "amount": "150.0" } },
         "lines": [
           {
             "id": "gid://shopify/CartLine/0",
-            "quantity": 6,
+            "quantity": 2,
             "merchandise": {
               "__typename": "ProductVariant",
               "id": "gid://shopify/ProductVariant/10",
@@ -21,18 +21,22 @@
         ]
       },
       "discount": {
-        "discountClasses": [],
+        "discountClasses": ["ORDER"],
         "metafield": {
           "jsonValue": {
             "version": 1,
-            "kind": "quantity_tiers",
-            "campaignName": "Tiered discount2",
-            "appliesTo": "all",
-            "productIds": [],
-            "variantIds": [],
+            "kind": "cart_goal",
+            "campaignName": "Spend and save",
             "collectionIds": [],
-            "fixedPerItem": false,
-            "tiers": [{ "quantity": 3, "value": 20, "type": "percentage" }]
+            "tiers": [
+              {
+                "requirementType": "both",
+                "amount": 100,
+                "quantity": 3,
+                "value": 10,
+                "type": "percentage"
+              }
+            ]
           }
         }
       }

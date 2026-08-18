@@ -30,6 +30,11 @@ import { useState, useCallback, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { countDiscountedVariants } from "../variants.server";
+import {
+  createShopifyDiscount,
+  deleteShopifyDiscountsByIds,
+  findMatchingDiscountIds,
+} from "../discount.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -41,6 +46,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   });
 
   let syncMessage = "";
+  // Campaigns still backed by the pre-Function per-tier native discounts. Those
+  // can't combine with each other, so two of them never apply to the same cart.
+  let legacyTierCampaigns: { id: string; name: string }[] = [];
 
   try {
     const discountNodesQuery = `
@@ -170,6 +178,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         if (status) shopifyStatusMap.set(title, status);
       }
     }
+
+    // A tiered campaign is on the old scheme when a discount titled
+    // "<name> (Buy 3+ …)" / "<name> (Spend $100+ …)" is still a native basic
+    // discount. The Function scheme creates a single DiscountAutomaticApp titled
+    // exactly "<name>", so nothing here matches once a campaign is migrated.
+    legacyTierCampaigns = campaigns
+      .filter(
+        (c) =>
+          (c.type === "quantity_discount" || c.type === "cart_goal") &&
+          shopifyDiscounts.some(
+            (node) =>
+              node.discount?.__typename === "DiscountAutomaticBasic" &&
+              typeof node.discount?.title === "string" &&
+              node.discount.title.startsWith(c.name + " (")
+          )
+      )
+      .map((c) => ({ id: c.id, name: c.name }));
 
     const existingNames = new Set(campaigns.map((c) => c.name));
     let importedCount = 0;
@@ -396,6 +421,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return json({
     syncMessage,
     campaigns: campaignData,
+    legacyTierCampaigns,
     plan: {
       name: "Starter",
       activeVariants: activeVariantCount,
@@ -659,12 +685,28 @@ async function setCampaignStatus(
             const ue = r.data?.discountAutomaticDeactivate?.userErrors || [];
             if (ue.length > 0) {
               errors.push(`${title}: ${ue.map((e: any) => e.message).join(", ")}`);
+              // Deactivate can refuse (e.g. an already-past end date). Forcing the
+              // end date into the past takes the discount out of circulation
+              // either way — but the update mutation differs per discount type.
               if (typename === "DiscountAutomaticBasic") {
                 await admin.graphql(
                   `
                   mutation expireDiscount($id: ID!, $discount: DiscountAutomaticBasicInput!) {
                     discountAutomaticBasicUpdate(id: $id, automaticBasicDiscount: $discount) {
                       automaticDiscountNode { id }
+                      userErrors { field message }
+                    }
+                  }
+                `,
+                  { variables: { id: node.id, discount: { endsAt: "2020-01-01T00:00:00Z" } } }
+                );
+                toggledCount++;
+              } else if (typename === "DiscountAutomaticApp") {
+                await admin.graphql(
+                  `
+                  mutation expireAppDiscount($id: ID!, $discount: DiscountAutomaticAppInput!) {
+                    discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $discount) {
+                      automaticAppDiscount { discountId }
                       userErrors { field message }
                     }
                   }
@@ -695,12 +737,26 @@ async function setCampaignStatus(
             if (ue.length > 0) errors.push(`${title}: ${ue.map((e: any) => e.message).join(", ")}`);
             else toggledCount++;
           } else {
+            // Clear any end date a previous pause forced into the past, or
+            // activate will just re-expire the discount.
             if (typename === "DiscountAutomaticBasic") {
               await admin.graphql(
                 `
                 mutation clearEndDate($id: ID!, $discount: DiscountAutomaticBasicInput!) {
                   discountAutomaticBasicUpdate(id: $id, automaticBasicDiscount: $discount) {
                     automaticDiscountNode { id }
+                    userErrors { field message }
+                  }
+                }
+              `,
+                { variables: { id: node.id, discount: { endsAt: null } } }
+              );
+            } else if (typename === "DiscountAutomaticApp") {
+              await admin.graphql(
+                `
+                mutation clearAppEndDate($id: ID!, $discount: DiscountAutomaticAppInput!) {
+                  discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $discount) {
+                    automaticAppDiscount { discountId }
                     userErrors { field message }
                   }
                 }
@@ -752,6 +808,92 @@ async function setCampaignStatus(
   };
 }
 
+/**
+ * Rebuilds a tiered campaign's Shopify discounts on the Function scheme.
+ *
+ * Campaigns created before the switch own one native discount per tier, and
+ * those are created with combinesWith.productDiscounts: false — so two such
+ * campaigns can never both apply to one cart. This replaces them with the single
+ * function-backed discount, which is the same delete-then-recreate the edit page
+ * performs on save; merchants just shouldn't have to re-save every campaign.
+ *
+ * Deliberately an explicit action rather than something the loader does on view:
+ * it deletes live discounts, and a partial failure leaves the campaign with none.
+ */
+async function migrateCampaignToFunction(admin: any, campaignId: string): Promise<OpResult> {
+  const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
+  if (!campaign) return { ok: false, message: "Campaign not found" };
+  if (campaign.type !== "quantity_discount" && campaign.type !== "cart_goal") {
+    return { ok: false, message: `"${campaign.name}" is not a tiered campaign.` };
+  }
+
+  let oldIds: string[];
+  try {
+    // Must run BEFORE creating the replacement — it matches on title prefix, and
+    // the replacement carries the same name.
+    oldIds = await findMatchingDiscountIds(admin, campaign.name);
+  } catch (err) {
+    console.error(`migrate lookup failed for "${campaign.name}":`, err);
+    return { ok: false, message: `Could not look up "${campaign.name}" in Shopify.` };
+  }
+
+  const deleteErrors = await deleteShopifyDiscountsByIds(admin, oldIds);
+  if (deleteErrors.length) {
+    return {
+      ok: false,
+      message: `"${campaign.name}": ${deleteErrors.join("; ")}`,
+    };
+  }
+
+  const result = await createShopifyDiscount(admin, {
+    name: campaign.name,
+    type: campaign.type,
+    discountType: campaign.discountType,
+    discountValue: campaign.discountValue ?? 0,
+    appliesTo: campaign.appliesTo,
+    // Both are nullable in the schema but required downstream. A tiered campaign
+    // gets its value from the tiers, not discountValue, and a missing start date
+    // means "already running".
+    startDate: campaign.startDate ?? new Date(),
+    endDate: campaign.endDate,
+    tiers: campaign.tiers,
+    productIds: campaign.productIds,
+    collectionIds: campaign.collectionIds,
+    combineWithProducts: campaign.combineWithProducts,
+    combineWithOrders: campaign.combineWithOrders,
+    combineWithShipping: campaign.combineWithShipping,
+    freeShipping: false,
+    minOrderForShipping: null,
+    minQuantityForShipping: null,
+    requirementType: campaign.requirementType,
+    discountCode: campaign.discountCode,
+    geoTarget: campaign.geoTarget,
+  });
+
+  if (!result.success) {
+    // The old discounts are already gone, so leave the campaign pointing at
+    // nothing rather than at a stale id the merchant can no longer act on.
+    await db.campaign.update({
+      where: { id: campaignId },
+      data: { shopifyDiscountId: null },
+    });
+    if (result.createdIds?.length) {
+      await deleteShopifyDiscountsByIds(admin, result.createdIds);
+    }
+    return {
+      ok: false,
+      message: `"${campaign.name}" could not be rebuilt: ${result.errors.join("; ")}. Open the campaign and save it to retry.`,
+    };
+  }
+
+  await db.campaign.update({
+    where: { id: campaignId },
+    data: { shopifyDiscountId: result.createdIds?.[0] ?? null },
+  });
+
+  return { ok: true, message: `"${campaign.name}" updated` };
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
   const formData = await request.formData();
@@ -766,6 +908,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (actionType === "toggle_status" && campaignId) {
     const r = await setCampaignStatus(admin, campaignId);
     return json({ success: r.ok, message: r.message });
+  }
+
+  if (actionType === "migrate_tiers") {
+    let ids: string[] = [];
+    try {
+      ids = JSON.parse((formData.get("campaignIds") as string) || "[]");
+    } catch {
+      ids = [];
+    }
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return json({ success: false, message: "Nothing to update." });
+    }
+
+    const failures: string[] = [];
+    let done = 0;
+    for (const id of ids) {
+      const r = await migrateCampaignToFunction(admin, id);
+      if (r.ok) done++;
+      else failures.push(r.message);
+    }
+
+    const summary = `${done} campaign${done === 1 ? "" : "s"} updated`;
+    return json({
+      success: failures.length === 0,
+      message: failures.length
+        ? `${summary}, ${failures.length} failed: ${failures.join("; ")}`
+        : summary,
+    });
   }
 
   // Bulk actions loop server-side: firing one request per row from the browser
@@ -821,12 +991,13 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export default function Campaigns() {
-  const { campaigns, plan, syncMessage } = useLoaderData<typeof loader>();
+  const { campaigns, plan, syncMessage, legacyTierCampaigns } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
 
   const toggleFetcher = useFetcher<{ success: boolean; message: string }>();
   const deleteFetcher = useFetcher<{ success: boolean; message: string }>();
+  const migrateFetcher = useFetcher<{ success: boolean; message: string }>();
 
   const [selectedTab, setSelectedTab] = useState(0);
   const [showSyncBanner, setShowSyncBanner] = useState(!!syncMessage);
@@ -859,6 +1030,18 @@ export default function Campaigns() {
       navigate("/app/campaigns");
     }
   }, [deleteFetcher.state, deleteFetcher.data, navigate]);
+
+  useEffect(() => {
+    if (migrateFetcher.data?.message) {
+      setActionMessage(migrateFetcher.data.message);
+      setShowActionBanner(true);
+    }
+    // Revalidate on failure too: a partial run still changed some campaigns, and
+    // the banner should drop the ones that succeeded.
+    if (migrateFetcher.state === "idle" && migrateFetcher.data) {
+      revalidator.revalidate();
+    }
+  }, [migrateFetcher.state, migrateFetcher.data, revalidator]);
 
   const tabs = [
     { id: "all", content: "All" },
@@ -1072,10 +1255,47 @@ export default function Campaigns() {
 
         {showActionBanner && actionMessage && (
           <Banner
-            tone={toggleFetcher.data?.success || deleteFetcher.data?.success ? "success" : "critical"}
+            tone={
+              toggleFetcher.data?.success ||
+              deleteFetcher.data?.success ||
+              migrateFetcher.data?.success
+                ? "success"
+                : "critical"
+            }
             onDismiss={() => setShowActionBanner(false)}
           >
             <p>{actionMessage}</p>
+          </Banner>
+        )}
+
+        {legacyTierCampaigns.length > 0 && (
+          <Banner tone="warning">
+            <BlockStack gap="200">
+              <p>
+                {legacyTierCampaigns.length === 1
+                  ? `"${legacyTierCampaigns[0].name}" is`
+                  : `${legacyTierCampaigns.length} campaigns are`}{" "}
+                using an older discount setup that can&rsquo;t combine with your other
+                campaigns — only one of them will apply to any given cart. Updating
+                rebuilds them in Shopify; your tiers and targeting stay the same.
+              </p>
+              <InlineStack>
+                <Button
+                  loading={migrateFetcher.state !== "idle"}
+                  onClick={() =>
+                    migrateFetcher.submit(
+                      {
+                        action: "migrate_tiers",
+                        campaignIds: JSON.stringify(legacyTierCampaigns.map((c) => c.id)),
+                      },
+                      { method: "post" }
+                    )
+                  }
+                >
+                  Update {legacyTierCampaigns.length === 1 ? "campaign" : "campaigns"}
+                </Button>
+              </InlineStack>
+            </BlockStack>
           </Banner>
         )}
 

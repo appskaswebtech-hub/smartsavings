@@ -195,10 +195,13 @@ export function cartDeliveryOptionsDiscountsGenerateRun(
             },
           ],
 
-          // First ensures only ONE shipping discount applies at checkout,
-          // preventing stacking with other shipping discount functions.
-          // The highest-threshold discount wins by design.
-          selectionStrategy: DeliveryDiscountSelectionStrategy.First,
+          // All is the only member this API version defines. It was previously
+          // .First, which doesn't exist here and evaluated to undefined — so the
+          // "only one shipping discount applies" intent was never actually in
+          // effect. Only one candidate is ever emitted above, so All is
+          // equivalent for this function; combining with OTHER shipping
+          // discounts is governed by combinesWith on the discount itself.
+          selectionStrategy: DeliveryDiscountSelectionStrategy.All,
         },
       },
     ],

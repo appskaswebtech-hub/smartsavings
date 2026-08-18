@@ -36,22 +36,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return new Response("OK", { status: 200 });
       }
 
-      // For tiered discounts (quantity/cart goal), the Shopify discount title
-      // is formatted as "CampaignName - Buy X+" or "CampaignName - Spend $X+"
-      // Check if the deleted discount title starts with any campaign name
+      // Fallback for LEGACY tiered campaigns only. Those created one Shopify
+      // discount per tier, titled "CampaignName (Buy X+ …)" / "(Spend $X+ …)",
+      // so deleting one tier shouldn't delete the whole campaign — it's marked
+      // expired instead.
+      //
+      // Tiered campaigns on the current scheme are a single discount titled
+      // exactly the campaign name, so the exact-match branch above handles them
+      // and this loop never sees them.
       const allCampaigns = await db.campaign.findMany({
         where: { shop },
       });
 
       for (const campaign of allCampaigns) {
         if (discountTitle.startsWith(campaign.name)) {
-          // Check if this is a tiered discount by seeing if other Shopify discounts
-          // with the same campaign prefix still exist
-          // For simplicity, we mark the campaign as expired instead of deleting
-          // since deleting one tier shouldn't delete the whole campaign
-          
-          // But if user explicitly deleted from Shopify, they probably want it gone
-          // So check if this is a single-discount campaign (not tiered)
           if (
             campaign.type !== "quantity_discount" &&
             campaign.type !== "cart_goal"

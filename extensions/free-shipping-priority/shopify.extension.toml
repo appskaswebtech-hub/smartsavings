@@ -17,6 +17,16 @@ description = "t:description"
   input_query = "src/cart_delivery_options_discounts_generate_run.graphql"
   export = "cart-delivery-options-discounts-generate-run"
 
+  # Populates input-query variables from a JSON metafield on the discount.
+  # Top-level keys of that metafield bind to same-named query variables, which is
+  # how `collectionIds` reaches $collectionIds in
+  # src/cart_lines_discounts_generate_run.graphql. This is declared once for the
+  # whole extension, not per target — hence both campaign types share one
+  # namespace/key and are told apart by the `kind` field inside the config.
+  [extensions.input.variables]
+  namespace = "$app:smartsavings"
+  key = "config"
+
   [extensions.build]
   command = ""
   path = "dist/function.wasm"

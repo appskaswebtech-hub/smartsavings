@@ -38,9 +38,12 @@ import { useIsSaving } from "../lib/useIsSaving";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { createShopifyDiscount, deleteShopifyDiscountsByIds } from "../discount.server";
+import {
+  createShopifyDiscount,
+  deleteShopifyDiscountsByIds,
+  findMatchingDiscountIds,
+} from "../discount.server";
 import { validateTiers, validateCartGoalTiers } from "../lib/validateTiers";
-import type { AdminApiContext } from "@shopify/shopify-app-remix/server";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   bulk_price: "Bulk price editor",
@@ -51,57 +54,8 @@ const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   shipping_discount: "Shipping discount",
 };
 
-// Finds the IDs of Shopify discounts currently matching a campaign name —
-// does NOT delete anything. Must be called BEFORE creating any replacement
-// discount with the same name: querying by title-prefix AFTER creation would
-// also match the brand-new discounts (same name prefix), causing them to be
-// deleted along with the old ones. Callers should snapshot these IDs first,
-// then delete them explicitly by ID once the replacements are confirmed live.
-// Does NOT catch its own errors — a failed lookup here must not be confused
-// with "no matching discounts exist." Swallowing it previously made the
-// caller skip deletion silently with no indication anything went wrong;
-// callers should catch this themselves and surface the failure to the user.
-async function findMatchingDiscountIds(
-  admin: AdminApiContext,
-  campaignName: string
-): Promise<string[]> {
-  const res = await admin.graphql(
-    `#graphql
-    query {
-      discountNodes(first: 250) {
-        nodes {
-          id
-          discount {
-            __typename
-            ... on DiscountAutomaticBasic { title }
-            ... on DiscountAutomaticApp { title }
-            ... on DiscountAutomaticBxgy { title }
-            ... on DiscountAutomaticFreeShipping { title }
-            ... on DiscountCodeBasic { title }
-            ... on DiscountCodeFreeShipping { title }
-          }
-        }
-      }
-    }`
-  );
-
-  const data: any = await res.json();
-  if (data?.errors) {
-    throw new Error(`findMatchingDiscountIds GraphQL error for "${campaignName}": ${JSON.stringify(data.errors)}`);
-  }
-  const nodes = data?.data?.discountNodes?.nodes || [];
-
-  return nodes
-    .filter((n: any) => {
-      const t = n.discount?.title || "";
-      return (
-        t === campaignName ||
-        t.startsWith(campaignName + " (") ||
-        t.startsWith(campaignName + " - ")
-      );
-    })
-    .map((n: any) => n.id);
-}
+// findMatchingDiscountIds now lives in discount.server.ts — the campaign list
+// route needs it too, to migrate campaigns off the old per-tier discounts.
 
 // ── Loader ────────────────────────────────────────────────────────────────────
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -1243,7 +1197,7 @@ export default function EditCampaign() {
                 <BlockStack gap="300">
                   <Checkbox
                     label="Product discounts"
-                    helpText="Stack with product discount codes"
+                    helpText="Stack with other product discounts. Turning this off means only one product discount applies per cart, so this campaign and your other product campaigns won't both apply."
                     checked={combineWithProducts}
                     onChange={setCombineWithProducts}
                   />
