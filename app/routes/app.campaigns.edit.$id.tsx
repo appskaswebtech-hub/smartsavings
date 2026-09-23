@@ -44,6 +44,25 @@ import {
   findMatchingDiscountIds,
 } from "../discount.server";
 import { validateTiers, validateCartGoalTiers } from "../lib/validateTiers";
+import {
+  SHIPPING_PROTECTION,
+  defaultProtectionDraft,
+  describeProtectionFees,
+  normalizeProtectionConfig,
+  parseProtectionConfig,
+  protectionDiscountColumns,
+  toProtectionDraft,
+  validateProtection,
+  type ProtectionConfigDraft,
+} from "../lib/shippingProtection";
+import {
+  findProtectionConflict,
+  getProtectionShopInfo,
+  syncShippingProtection,
+} from "../shippingProtection.server";
+import { ensureFeeProduct } from "../shippingProtectionProduct.server";
+import { getShopDisplayName } from "../lib/shopName.server";
+import { ShippingProtectionForm, ShippingProtectionPreview } from "../components/ShippingProtectionForm";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   bulk_price: "Bulk price editor",
@@ -52,6 +71,7 @@ const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   advanced_discount_code: "Advanced discount code",
   cart_goal: "Cart goal",
   shipping_discount: "Shipping discount",
+  shipping_protection: "Shipping protection",
 };
 
 // findMatchingDiscountIds now lives in discount.server.ts — the campaign list
@@ -210,6 +230,23 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     } catch {}
   }
 
+  let protection: {
+    config: ProtectionConfigDraft;
+    supported: boolean;
+    currencyCode: string;
+  } | null = null;
+  if (campaign.type === SHIPPING_PROTECTION) {
+    const shopInfo = await getProtectionShopInfo(admin);
+    // Older configs are converted here; discountValue held their percentage.
+    const saved = parseProtectionConfig(campaign.protectionConfig, campaign.discountValue);
+    protection = {
+      ...shopInfo,
+      config: saved
+        ? toProtectionDraft(saved)
+        : defaultProtectionDraft(await getShopDisplayName(admin, shop)),
+    };
+  }
+
   return json({
     campaign: {
       ...campaign,
@@ -224,6 +261,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     loadedProducts,
     loadedCollections,
     existingDiscountCode,
+    protection,
   });
 };
 
@@ -291,6 +329,57 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       success: false,
       error: "End date must be after the start date.",
     });
+  }
+
+  // Shipping protection has no Shopify discount to delete and recreate — save,
+  // then republish the storefront config.
+  if (campaign.type === SHIPPING_PROTECTION) {
+    const submitted = parseProtectionConfig(formData.get("protectionConfig") as string);
+    const invalid = validateProtection(submitted);
+    if (invalid || !submitted) return json({ success: false, error: invalid });
+    // Fixed fees are entered in the shop currency — record which one.
+    submitted.currencyCode = (await getProtectionShopInfo(admin)).currencyCode;
+
+    // Products can change here, so re-check it doesn't now overlap another
+    // active campaign (or an all-products one).
+    if (campaign.status === "active") {
+      const conflict = await findProtectionConflict(shop, submitted, campaignId);
+      if (conflict) return json({ success: false, error: conflict });
+    }
+
+    // The fee product comes from the saved campaign, never from the form.
+    const saved = parseProtectionConfig(campaign.protectionConfig, campaign.discountValue);
+    const fee = await ensureFeeProduct(
+      admin,
+      {
+        ...submitted,
+        feeProductId: saved?.feeProductId ?? "",
+        feeVariantId: saved?.feeVariantId ?? "",
+        componentProductId: saved?.componentProductId ?? "",
+        componentVariantId: saved?.componentVariantId ?? "",
+      },
+      saved
+    );
+    if ("error" in fee) return json({ success: false, error: fee.error });
+    const protectionConfig = fee.config;
+
+    await db.campaign.update({
+      where: { id: campaignId },
+      data: {
+        name,
+        ...protectionDiscountColumns(protectionConfig),
+        startDate: campaignStartDate,
+        endDate: campaignEndDate,
+        protectionConfig: JSON.stringify(protectionConfig),
+        updatedAt: new Date(),
+      },
+    });
+
+    const syncErrors = await syncShippingProtection(admin, shop);
+    if (syncErrors.length > 0) {
+      return json({ success: false, error: `Saved with Shopify errors: ${syncErrors.join("; ")}` });
+    }
+    return redirect(`/app/campaigns/${campaignId}`);
   }
 
   const finalDiscountType =
@@ -472,6 +561,7 @@ export default function EditCampaign() {
     loadedProducts,
     loadedCollections,
     existingDiscountCode,
+    protection,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
@@ -556,6 +646,11 @@ export default function EditCampaign() {
   const [popupPageScope, setPopupPageScope] = useState<string>(_pages.includes("all") ? "all" : "specific");
   const [popupPageTypes, setPopupPageTypes] = useState<string[]>(
     _pages.includes("all") ? [] : _pages
+  );
+
+  // Shipping protection (shipping_protection only)
+  const [protectionConfig, setProtectionConfig] = useState<ProtectionConfigDraft>(
+    () => protection?.config ?? defaultProtectionDraft("our store")
   );
 
   const [tiers, setTiers] = useState<any[]>(
@@ -703,6 +798,23 @@ export default function EditCampaign() {
       }
     }
 
+    if (type === SHIPPING_PROTECTION) {
+      const protectionError = validateProtection(normalizeProtectionConfig(protectionConfig));
+      if (protectionError) {
+        shopify.toast.show(protectionError, { isError: true });
+        return;
+      }
+      const pfd = new FormData();
+      pfd.append("name", name);
+      pfd.append("startNow", String(startNow));
+      pfd.append("startDate", startDate);
+      pfd.append("hasEndDate", String(hasEndDate));
+      pfd.append("endDate", endDate);
+      pfd.append("protectionConfig", JSON.stringify(protectionConfig));
+      submit(pfd, { method: "post" });
+      return;
+    }
+
     if (type === "shipping_discount" && !geoTarget) {
       shopify.toast.show("Please choose where free shipping applies.", {
         isError: true,
@@ -824,6 +936,17 @@ export default function EditCampaign() {
               </BlockStack>
             </Card>
 
+            {type === SHIPPING_PROTECTION && (
+              <ShippingProtectionForm
+                config={protectionConfig}
+                onConfigChange={setProtectionConfig}
+                supported={protection?.supported ?? true}
+                currencyCode={protection?.currencyCode || "USD"}
+              />
+            )}
+
+            {type !== SHIPPING_PROTECTION && (
+            <>
             <Card>
               <BlockStack gap="400">
                 <Text as="h2" variant="headingMd">
@@ -1588,6 +1711,8 @@ export default function EditCampaign() {
                 )}
               </BlockStack>
             </Card>
+            </>
+            )}
 
             {/* Email popup — advanced_discount_code only */}
             {type === "advanced_discount_code" && (
@@ -1733,6 +1858,13 @@ export default function EditCampaign() {
         </Layout.Section>
 
         <Layout.Section variant="oneThird">
+          <BlockStack gap="400">
+          {type === SHIPPING_PROTECTION && (
+            <ShippingProtectionPreview
+              config={protectionConfig}
+              currencyCode={protection?.currencyCode || "USD"}
+            />
+          )}
           <Card>
             <BlockStack gap="400">
               <Text as="h2" variant="headingMd">
@@ -1753,6 +1885,18 @@ export default function EditCampaign() {
                   {name || "—"}
                 </Text>
               </BlockStack>
+              {type === SHIPPING_PROTECTION ? (
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" fontWeight="bold">
+                    Protection fee
+                  </Text>
+                  <Text as="p" variant="bodyMd">
+                    {describeProtectionFees(
+                      normalizeProtectionConfig({ ...protectionConfig, currencyCode: protection?.currencyCode })
+                    )}
+                  </Text>
+                </BlockStack>
+              ) : (
               <BlockStack gap="100">
                 <Text as="p" variant="bodySm" fontWeight="bold">
                   Applies to
@@ -1765,6 +1909,7 @@ export default function EditCampaign() {
                       : `${selectedCollections.length} collection(s)`}
                 </Text>
               </BlockStack>
+              )}
 
               {type === "quantity_discount" && (
                 <BlockStack gap="100">
@@ -1817,6 +1962,7 @@ export default function EditCampaign() {
               </BlockStack>
             </BlockStack>
           </Card>
+          </BlockStack>
         </Layout.Section>
       </Layout>
     </Page>

@@ -8,6 +8,12 @@ import {
 import { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import {
+  SHIPPING_PROTECTION,
+  describeProtectionFees,
+  parseProtectionConfig,
+  protectionNotLiveReason,
+} from "../lib/shippingProtection";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -243,6 +249,7 @@ const TYPE_LABELS: Record<string, string> = {
   bulk_price: "Bulk Price Editor", quantity_discount: "Quantity Discount",
   buy_x_get_y: "Buy X Get Y", advanced_discount_code: "Advanced Discount Code",
   cart_goal: "Cart Goal", shipping_discount: "Shipping Discount",
+  shipping_protection: "Shipping Protection",
 };
 
 const DISCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -306,8 +313,14 @@ export default function CampaignDetail() {
     return map[s] || <Badge>{s}</Badge>;
   };
 
+  const isProtection = campaign.type === SHIPPING_PROTECTION;
+  const protectionConfig = isProtection
+    ? parseProtectionConfig(campaign.protectionConfig, campaign.discountValue)
+    : null;
+
   const discountDisplay = () => {
     const { discountType, discountValue } = campaign;
+    if (isProtection) return describeProtectionFees(protectionConfig);
     if (tiers.length > 0) return `${tiers.length} tier${tiers.length > 1 ? "s" : ""}`;
     if (discountType === "free_shipping") return "Free Shipping";
     if (discountType === "percentage") return `${discountValue}% off`;
@@ -375,7 +388,11 @@ export default function CampaignDetail() {
               <BlockStack gap="200">
                 <Text as="span" variant="bodySm" tone="subdued">Applies To</Text>
                 <Text as="span" variant="bodyMd">
-                  {campaign.appliesTo === "specific_products" && productEntries.length > 0
+                  {isProtection
+                    ? protectionConfig?.appliesTo === "all"
+                      ? "All products"
+                      : `${protectionConfig?.products.length ?? 0} protected product(s)`
+                    : campaign.appliesTo === "specific_products" && productEntries.length > 0
                     ? `${productEntries.length} specific product(s)`
                     : campaign.appliesTo === "specific_products" ? "Specific products"
                     : campaign.appliesTo === "specific_collections" && collectionNames.length > 0
@@ -440,7 +457,72 @@ export default function CampaignDetail() {
           </Card>
         )}
 
+        {/* ── Shipping protection: fee product, protected products, widget text ── */}
+        {isProtection && (
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">Shipping protection</Text>
+              <Divider />
+              {protectionNotLiveReason(protectionConfig) && (
+                <Banner tone="warning">
+                  <p>
+                    Shoppers won't see protection yet. {protectionNotLiveReason(protectionConfig)}
+                  </p>
+                </Banner>
+              )}
+              <BlockStack gap="200">
+                <Text as="span" variant="bodySm" tone="subdued">Cart item (managed by the app)</Text>
+                <InlineStack gap="300" blockAlign="center">
+                  {protectionConfig?.feeImageUrl
+                    ? <Thumbnail source={protectionConfig.feeImageUrl} alt={protectionConfig.feeProductTitle} size="small" />
+                    : <Box width="40px" minHeight="40px" background="bg-surface-secondary" borderRadius="100" />}
+                  <Text as="p" variant="bodyMd" fontWeight="bold">
+                    {protectionConfig?.feeProductTitle || "Premium Shipping Protection"}
+                  </Text>
+                  <Badge tone="info">{describeProtectionFees(protectionConfig)}</Badge>
+                </InlineStack>
+              </BlockStack>
+              <BlockStack gap="200">
+                <Text as="span" variant="bodySm" tone="subdued">Protected products</Text>
+                {protectionConfig?.appliesTo === "all" ? (
+                  <Text as="span" variant="bodyMd">All products</Text>
+                ) : (
+                  <InlineGrid columns={2} gap="300">
+                    {(protectionConfig?.products ?? []).map((p) => (
+                      <InlineStack key={p.productId} gap="200" blockAlign="center" wrap={false}>
+                        {p.imageUrl
+                          ? <Thumbnail source={p.imageUrl} alt={p.productTitle} size="extraSmall" />
+                          : <Box width="24px" minHeight="24px" background="bg-surface-secondary" borderRadius="100" />}
+                        <Text as="span" variant="bodyMd">{p.productTitle}</Text>
+                      </InlineStack>
+                    ))}
+                  </InlineGrid>
+                )}
+              </BlockStack>
+              <InlineGrid columns={2} gap="400">
+                <BlockStack gap="100">
+                  <Text as="span" variant="bodySm" tone="subdued">Heading</Text>
+                  <Text as="span" variant="bodyMd">{protectionConfig?.heading || "—"}</Text>
+                </BlockStack>
+                <BlockStack gap="100">
+                  <Text as="span" variant="bodySm" tone="subdued">Title</Text>
+                  <Text as="span" variant="bodyMd">{protectionConfig?.title || "—"}</Text>
+                </BlockStack>
+                <BlockStack gap="100">
+                  <Text as="span" variant="bodySm" tone="subdued">Subtitle</Text>
+                  <Text as="span" variant="bodyMd">{protectionConfig?.subtitle || "—"}</Text>
+                </BlockStack>
+                <BlockStack gap="100">
+                  <Text as="span" variant="bodySm" tone="subdued">Description</Text>
+                  <Text as="span" variant="bodyMd">{protectionConfig?.description || "—"}</Text>
+                </BlockStack>
+              </InlineGrid>
+            </BlockStack>
+          </Card>
+        )}
+
         {/* ── Products / Variants / Collections ── */}
+        {!isProtection && (
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">
@@ -542,6 +624,7 @@ export default function CampaignDetail() {
             )}
           </BlockStack>
         </Card>
+        )}
 
         {/* ── Discount Popup summary ── */}
         {campaign.type === "advanced_discount_code" && (
@@ -608,7 +691,8 @@ export default function CampaignDetail() {
           </Card>
         )}
 
-        {/* ── Shopify Discounts ── */}
+        {/* ── Shopify Discounts (protection creates none) ── */}
+        {!isProtection && (
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Shopify Store Discounts</Text>
@@ -640,6 +724,7 @@ export default function CampaignDetail() {
             )}
           </BlockStack>
         </Card>
+        )}
 
       </BlockStack>
     </Page>

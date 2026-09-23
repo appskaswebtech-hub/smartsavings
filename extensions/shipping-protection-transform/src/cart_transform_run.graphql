@@ -1,0 +1,32 @@
+# The config metafield is written onto this app's CartTransform by
+# syncShippingProtection() in app/shippingProtection.server.ts whenever a
+# Shipping protection campaign is created, edited, paused, resumed or deleted.
+query CartTransformRunInput {
+  # Converts a fixed fee (entered in the shop currency) to the shopper's currency.
+  presentmentCurrencyRate
+  cart {
+    lines {
+      id
+      quantity
+      cost {
+        subtotalAmount {
+          amount
+        }
+      }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          product {
+            id
+          }
+        }
+      }
+    }
+  }
+  cartTransform {
+    metafield(namespace: "$app:smartsavings", key: "shipping_protection") {
+      jsonValue
+    }
+  }
+}

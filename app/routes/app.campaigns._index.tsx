@@ -35,6 +35,16 @@ import {
   deleteShopifyDiscountsByIds,
   findMatchingDiscountIds,
 } from "../discount.server";
+import {
+  SHIPPING_PROTECTION,
+  describeProtectionFees,
+  parseProtectionConfig,
+} from "../lib/shippingProtection";
+import {
+  findProtectionConflict,
+  syncShippingProtection,
+} from "../shippingProtection.server";
+import { deleteProtectionProducts } from "../shippingProtectionProduct.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -411,6 +421,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         endDate: c.endDate ? new Date(c.endDate).toLocaleDateString() : "No end date",
         appliesTo: c.appliesTo,
         tiers: c.tiers,
+        protectionConfig: c.protectionConfig,
         shopifyDiscountId: c.shopifyDiscountId,
         appliesToDisplay,
         appliesToItems,
@@ -443,6 +454,22 @@ type OpResult = { ok: boolean; message: string };
 async function deleteCampaign(admin: any, campaignId: string): Promise<OpResult> {
   const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
   if (!campaign) return { ok: false, message: "Campaign not found" };
+
+  // No Shopify discount to remove — just unpublish its storefront config.
+  if (campaign.type === SHIPPING_PROTECTION) {
+    await db.campaign.delete({ where: { id: campaignId } });
+    const syncErrors = await syncShippingProtection(admin, campaign.shop);
+    // Its "Premium Shipping Protection" product goes too (only if the app made it).
+    syncErrors.push(
+      ...(await deleteProtectionProducts(admin, parseProtectionConfig(campaign.protectionConfig)))
+    );
+    return {
+      ok: true,
+      message: syncErrors.length
+        ? `"${campaign.name}" deleted from app. Store error: ${syncErrors.join(", ")}`
+        : `"${campaign.name}" deleted`,
+    };
+  }
 
   let shopifyDeleted = 0;
   let shopifyError = "";
@@ -609,6 +636,34 @@ async function setCampaignStatus(
 
   // No target given = flip, which is what the per-row Pause/Resume button does.
   const newStatus = targetStatus ?? (campaign.status === "active" ? "paused" : "active");
+
+  // No Shopify discount to (de)activate — republish the storefront config.
+  if (campaign.type === SHIPPING_PROTECTION) {
+    if (newStatus === "active") {
+      const config = parseProtectionConfig(campaign.protectionConfig, campaign.discountValue);
+      const conflict = await findProtectionConflict(
+        campaign.shop,
+        { appliesTo: config?.appliesTo ?? "all", products: config?.products ?? [] },
+        campaign.id
+      );
+      if (conflict) return { ok: false, message: conflict };
+    }
+    await db.campaign.update({ where: { id: campaignId }, data: { status: newStatus } });
+    const syncErrors = await syncShippingProtection(admin, campaign.shop);
+    if (syncErrors.length > 0) {
+      await db.campaign.update({ where: { id: campaignId }, data: { status: campaign.status } });
+      await syncShippingProtection(admin, campaign.shop);
+      return {
+        ok: false,
+        message: `Failed to ${newStatus === "paused" ? "pause" : "activate"}: ${syncErrors.join("; ")}`,
+      };
+    }
+    return {
+      ok: true,
+      message: `"${campaign.name}" ${newStatus === "active" ? "activated" : "paused"} successfully`,
+    };
+  }
+
   const errors: string[] = [];
   let toggledCount = 0;
 
@@ -988,6 +1043,7 @@ const TYPE_LABELS: Record<string, string> = {
   advanced_discount_code: "Discount Code",
   cart_goal: "Cart Goal",
   shipping_discount: "Shipping",
+  shipping_protection: "Shipping Protection",
 };
 
 export default function Campaigns() {
@@ -1214,6 +1270,9 @@ export default function Campaigns() {
   };
 
   const getDiscountDisplay = (c: any) => {
+    if (c.type === SHIPPING_PROTECTION) {
+      return describeProtectionFees(parseProtectionConfig(c.protectionConfig, c.discountValue));
+    }
     if (c.discountType === "free_shipping") return "Free shipping";
     if ((c.type === "quantity_discount" || c.type === "cart_goal") && c.tiers) {
       try {

@@ -1,0 +1,98 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {
+          "subtotalAmount": {
+            "amount": "350.0"
+          }
+        },
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "100.0"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1000",
+              "product": {
+                "id": "gid://shopify/Product/100",
+                "inCampaignCollection": false,
+                "isProtection": false
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "100.0"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/2000",
+              "product": {
+                "id": "gid://shopify/Product/200",
+                "inCampaignCollection": false,
+                "isProtection": false
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "quantity": 1,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "150.0"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/9990",
+              "product": {
+                "id": "gid://shopify/Product/999",
+                "inCampaignCollection": false,
+                "isProtection": true
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": [
+          "PRODUCT"
+        ],
+        "metafield": {
+          "jsonValue": {
+            "version": 1,
+            "kind": "quantity_tiers",
+            "campaignName": "Storewide bulk",
+            "appliesTo": "all",
+            "productIds": [],
+            "variantIds": [],
+            "collectionIds": [],
+            "fixedPerItem": false,
+            "tiers": [
+              {
+                "quantity": 3,
+                "value": 5,
+                "type": "fixed_amount"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

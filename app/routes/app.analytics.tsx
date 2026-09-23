@@ -76,6 +76,7 @@ function campaignTypeLabel(type: string) {
     cart_goal: "Cart Goal",
     buy_x_get_y: "Buy X Get Y",
     shipping_discount: "Shipping Discount",
+    shipping_protection: "Shipping Protection",
   };
   return labels[type] ?? type;
 }
@@ -681,6 +682,7 @@ export default function Analytics() {
                         { label: "Cart Goal", value: "cart_goal" },
                         { label: "Buy X Get Y", value: "buy_x_get_y" },
                         { label: "Shipping Discount", value: "shipping_discount" },
+                        { label: "Shipping Protection", value: "shipping_protection" },
                       ]}
                       selected={typeFilter}
                       onChange={setTypeFilter}

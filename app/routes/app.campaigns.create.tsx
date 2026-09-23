@@ -642,6 +642,71 @@ function ShippingDiscountPreview() {
   );
 }
 
+function ShippingProtectionPreview() {
+  return (
+    <div
+      style={{
+        background: "white",
+        borderRadius: "8px",
+        padding: "12px",
+        border: "1px solid #e5e5e5",
+        width: "100%",
+        maxWidth: "220px",
+        fontSize: "11px",
+      }}
+    >
+      <div style={{ fontWeight: "bold", fontSize: "9px", marginBottom: "6px" }}>
+        Yes, add shipping insurance please!
+      </div>
+      <div
+        style={{
+          display: "flex",
+          gap: "6px",
+          alignItems: "flex-start",
+          border: "1px solid #eee",
+          borderRadius: "6px",
+          padding: "6px",
+        }}
+      >
+        <div
+          style={{
+            width: "22px",
+            height: "22px",
+            borderRadius: "4px",
+            background: "#f3e8ea",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "11px",
+            flexShrink: 0,
+          }}
+        >
+          📦
+        </div>
+        <div style={{ flex: 1, fontSize: "8px", color: "#666" }}>
+          <div style={{ fontWeight: "bold", fontSize: "9px", color: "#111" }}>Shipping insurance</div>
+          <div>from Damage, Loss & Theft for $20</div>
+        </div>
+        <span
+          style={{
+            width: "11px",
+            height: "11px",
+            borderRadius: "3px",
+            background: "#10b981",
+            color: "white",
+            fontSize: "8px",
+            lineHeight: "11px",
+            textAlign: "center",
+            flexShrink: 0,
+          }}
+        >
+          ✓
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /* ── Main Component ────────────────────────────────────────── */
 
 export default function CreateCampaign() {
@@ -723,6 +788,16 @@ export default function CreateCampaign() {
       category: "both",
       locked: false,
       preview: <ShippingDiscountPreview />,
+    },
+    {
+      id: "shipping_protection",
+      title: "Shipping protection",
+      description:
+        "Let customers protect their order against damage, loss & theft for a % of the cart value.",
+      example: "Protect your order for 20% of cart value",
+      category: "automatic",
+      locked: false,
+      preview: <ShippingProtectionPreview />,
     },
   ];
 

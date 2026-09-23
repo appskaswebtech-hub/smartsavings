@@ -32,7 +32,7 @@ model Campaign {
   id                 String    @id @default(cuid())
   shop               String
   name               String
-  type               String    // quantity_discount, bulk_price, cart_goal, buy_x_get_y, shipping_discount
+  type               String    // quantity_discount, bulk_price, cart_goal, buy_x_get_y, shipping_discount, shipping_protection
   status             String    @default("draft") // draft, active, scheduled, expired, paused
   discountType       String    // percentage, fixed_amount, free_shipping
   discountValue      Float?
@@ -72,6 +72,11 @@ model Campaign {
   // Content of the discount-code email (separate from the on-site popup text).
   // JSON { heading, body, buttonText, buttonUrl, footer }. On MySQL: @db.Text.
   emailContent       String?   @db.Text
+
+  // Shipping protection — JSON { productId, variantId, productTitle, imageUrl,
+  // heading, title, subtitle, description }. Percentage lives in discountValue.
+  // On MySQL: @db.Text.
+  protectionConfig   String?
 
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt

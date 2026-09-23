@@ -6,7 +6,7 @@ embedded = true
 
 # Access scopes
 [access_scopes]
-scopes = "read_products,write_products,read_discounts,write_discounts"
+scopes = "read_products,write_products,read_discounts,write_discounts,write_cart_transforms,write_publications"
 
 # Auth settings
 [auth]

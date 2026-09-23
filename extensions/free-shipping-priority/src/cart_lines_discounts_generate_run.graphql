@@ -12,6 +12,11 @@ query CartInput($collectionIds: [ID!]! = []) {
     lines {
       id
       quantity
+      cost {
+        subtotalAmount {
+          amount
+        }
+      }
       merchandise {
         __typename
         ... on ProductVariant {
@@ -19,6 +24,9 @@ query CartInput($collectionIds: [ID!]! = []) {
           product {
             id
             inCampaignCollection: inAnyCollection(ids: $collectionIds)
+            # Shipping protection fee / coverage products (app-created, tagged) —
+            # never discounted and never counted toward tier thresholds.
+            isProtection: hasAnyTag(tags: ["smartsavings-shipping-protection", "smartsavings-shipping-protection-component"])
           }
         }
       }

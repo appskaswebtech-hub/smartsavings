@@ -134,6 +134,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         try { popupPages = JSON.parse(c.popupPages); } catch {}
       }
 
+      // Shipping protection isn't served here: its theme block reads the app's
+      // shop metafield straight from the page (see shipping-protection.liquid).
       return {
         id: c.id,
         name: c.name,

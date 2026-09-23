@@ -87,6 +87,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
       campaigns.forEach(function(c) {
         if (c.status !== 'active') return;
+        // An opt-in paid add-on, not a discount — it has its own cart block.
+        if (c.type === 'shipping_protection') return;
 
         var applies = false;
         if (c.appliesTo === 'all' || !c.appliesTo) {

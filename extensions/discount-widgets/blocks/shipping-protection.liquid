@@ -1,0 +1,63 @@
+{% comment %}
+  SmartDiscounts - Shipping Protection (product and cart pages)
+  One opt-in card per active protection campaign that covers what's on the page
+  or in the cart; each adds its own protection fee product.
+  Shows on a protected product's page, and on the cart page while protected
+  items are in the cart. Config is the app's shop metafield
+  ($app:smartsavings/shipping_protection, written by syncShippingProtection) —
+  embedded here so the widget needs no app-proxy request. Logic lives in
+  assets/shipping-protection.js (inline scripts count toward the extension's
+  100 KB Liquid limit). The fee line is
+  priced by the shipping-protection-transform Cart Transform; checkout shows the
+  same card via the shipping-protection-checkout extension.
+{% endcomment %}
+
+{% if block.settings.enabled %}
+  <div
+    data-sd-protect
+    data-shop="{{ shop.permanent_domain }}"
+    data-currency="{{ cart.currency.iso_code }}"
+    data-locale="{{ request.locale.iso_code }}"
+    {% if product %}
+      data-product-id="{{ product.id }}"
+      data-product-price="{{ product.selected_or_first_available_variant.price }}"
+    {% endif %}
+    style="margin:16px 0;display:none;"
+  >
+    <script type="application/json" data-sd-protect-config>{{ shop.metafields["$app:smartsavings"].shipping_protection.value | json }}</script>
+    <div class="sd-protect-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+    <template class="sd-protect-tpl">
+      <div>
+        <div class="sd-protect-heading" style="font-weight:700;font-size:15px;margin-bottom:8px;color:{{ block.settings.heading_color }};"></div>
+        <label style="display:flex;gap:12px;align-items:flex-start;border:1px solid {{ block.settings.border_color }};border-radius:{{ block.settings.border_radius }}px;padding:14px;background:{{ block.settings.card_bg }};cursor:pointer;">
+          <input type="checkbox" class="sd-protect-check" style="width:18px;height:18px;margin:2px 0 0 0;flex-shrink:0;cursor:pointer;accent-color:{{ block.settings.accent_color }};">
+          <img class="sd-protect-img" alt="" width="48" height="48" style="width:48px;height:48px;object-fit:contain;border-radius:8px;flex-shrink:0;display:none;">
+          <span style="flex:1;min-width:0;color:{{ block.settings.text_color }};">
+            <span class="sd-protect-title" style="display:block;font-weight:600;font-size:14px;"></span>
+            <span class="sd-protect-subtitle" style="display:block;font-size:12px;opacity:0.75;margin-top:2px;"></span>
+            <span class="sd-protect-desc" style="display:block;font-size:12px;opacity:0.75;margin-top:2px;"></span>
+          </span>
+        </label>
+      </div>
+    </template>
+  </div>
+  <script src="{{ 'shipping-protection.js' | asset_url }}" defer></script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Shipping Protection",
+  "target": "section",
+  "settings": [
+    { "type": "checkbox", "id": "enabled", "label": "Enable shipping protection widget", "default": true },
+    { "type": "paragraph", "content": "Add to a product page or the cart page. Products, text and price come from your active Shipping protection campaign in the app." },
+    { "type": "header", "content": "Styles" },
+    { "type": "color", "id": "heading_color", "label": "Heading color", "default": "#000000" },
+    { "type": "color", "id": "text_color", "label": "Card text color", "default": "#1A1A1A" },
+    { "type": "color", "id": "card_bg", "label": "Card background", "default": "#FFFFFF" },
+    { "type": "color", "id": "border_color", "label": "Border color", "default": "#E3E3E3" },
+    { "type": "color", "id": "accent_color", "label": "Checkbox color", "default": "#A0485E" },
+    { "type": "range", "id": "border_radius", "label": "Border radius", "min": 0, "max": 20, "step": 1, "default": 10, "unit": "px" }
+  ]
+}
+{% endschema %}

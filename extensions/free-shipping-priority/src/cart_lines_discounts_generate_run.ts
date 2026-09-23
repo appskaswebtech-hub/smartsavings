@@ -146,6 +146,12 @@ function numericId(gid: string): string {
   return m ? m[1] : gid;
 }
 
+// Shipping protection fee/coverage lines (app-created, tagged products) are a
+// charge, not merchandise: never discounted, never counted toward thresholds.
+function isProtectionLine(line: CartInput['cart']['lines'][number]): boolean {
+  return line.merchandise.__typename === 'ProductVariant' && line.merchandise.product.isProtection;
+}
+
 function savingLabel(value: number, type: TierType): string {
   return type === 'fixed_amount' ? `Save $${value}` : `Save ${value}%`;
 }
@@ -220,6 +226,7 @@ function runQuantityTiers(
     const merch = line.merchandise;
     // Gift cards and custom products carry no product id — never discountable here.
     if (merch.__typename !== 'ProductVariant') continue;
+    if (isProtectionLine(line)) continue;
 
     const matched =
       appliesToAll ||
@@ -332,15 +339,22 @@ function runCartGoal(
   input: CartInput,
   config: CartGoalConfig,
 ): CartLinesDiscountsGenerateRunResult {
-  const subtotal = parseFloat(input.cart.cost.subtotalAmount.amount);
+  // Protection lines neither count toward a tier nor get the order discount.
+  const protectionLines = input.cart.lines.filter(isProtectionLine);
+  const protectionSubtotal = protectionLines.reduce(
+    (sum, line) => sum + (parseFloat(line.cost.subtotalAmount.amount) || 0),
+    0,
+  );
+  const subtotal = parseFloat(input.cart.cost.subtotalAmount.amount) - protectionSubtotal;
   if (isNaN(subtotal)) {
     return { operations: [] };
   }
 
   let totalQuantity = 0;
   for (const line of input.cart.lines) {
-    totalQuantity += line.quantity;
+    if (!isProtectionLine(line)) totalQuantity += line.quantity;
   }
+  const excludedCartLineIds = protectionLines.map((line) => line.id);
 
   const candidates: OrderDiscountCandidate[] = [];
 
@@ -355,7 +369,7 @@ function runCartGoal(
 
     candidates.push({
       message: withCampaignName(config.campaignName, cartGoalLabel(tier)),
-      targets: [{ orderSubtotal: { excludedCartLineIds: [] } }],
+      targets: [{ orderSubtotal: { excludedCartLineIds } }],
       value,
     });
   }

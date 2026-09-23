@@ -1,0 +1,33 @@
+# Learn more about configuring your checkout UI extension:
+# https://shopify.dev/docs/api/checkout-ui-extensions/latest/configuration
+
+# The version of APIs your extension will receive. Learn more:
+# https://shopify.dev/docs/api/usage/versioning
+api_version = "2026-07"
+
+[[extensions]]
+name = "Shipping protection"
+handle = "shipping-protection-checkout"
+type = "ui_extension"
+uid = "6fde93ba-7ded-5b57-59f2-1fcad6626de1c4e30f41"
+
+# A block the merchant places in the checkout editor (e.g. below Shipping
+# method). Unlike a static target it doesn't wait for shipping methods — those
+# only render after an address is entered. Checkout-step blocks only render on
+# Shopify Plus (and development) stores.
+[[extensions.targeting]]
+module = "./src/Checkout.jsx"
+target = "purchase.checkout.block.render"
+
+# "× Remove" under the Shipping protection line in the order summary (renders
+# on every line, empty except the fee line). Also Plus-only, like all
+# checkout-step targets.
+[[extensions.targeting]]
+module = "./src/CartLineRemove.jsx"
+target = "purchase.checkout.cart-line-item.render-after"
+
+# The active Shipping protection campaign's config, written to the shop by
+# syncShippingProtection() in app/shippingProtection.server.ts.
+[[extensions.metafields]]
+namespace = "$app:smartsavings"
+key = "shipping_protection"

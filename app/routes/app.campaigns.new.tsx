@@ -35,6 +35,23 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { createShopifyDiscount, deleteShopifyDiscountsByIds } from "../discount.server";
 import { validateTiers, validateCartGoalTiers } from "../lib/validateTiers";
+import {
+  SHIPPING_PROTECTION,
+  defaultProtectionDraft,
+  normalizeProtectionConfig,
+  parseProtectionConfig,
+  protectionDiscountColumns,
+  validateProtection,
+  type ProtectionConfigDraft,
+} from "../lib/shippingProtection";
+import {
+  findProtectionConflict,
+  getProtectionShopInfo,
+  syncShippingProtection,
+} from "../shippingProtection.server";
+import { deleteManagedProducts, ensureFeeProduct } from "../shippingProtectionProduct.server";
+import { getShopDisplayName } from "../lib/shopName.server";
+import { ShippingProtectionForm, ShippingProtectionPreview } from "../components/ShippingProtectionForm";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   bulk_price: "Bulk price editor",
@@ -43,6 +60,7 @@ const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   advanced_discount_code: "Advanced discount code",
   cart_goal: "Cart goal",
   shipping_discount: "Shipping discount",
+  shipping_protection: "Shipping protection",
 };
 
 const CAMPAIGN_TYPE_DESCRIPTIONS: Record<string, string> = {
@@ -52,6 +70,8 @@ const CAMPAIGN_TYPE_DESCRIPTIONS: Record<string, string> = {
   advanced_discount_code: "Offer order and shipping discounts with a single code.",
   cart_goal: "Offer discounts when customers reach a minimum cart value.",
   shipping_discount: "Offer different shipping discounts or free shipping promotions.",
+  shipping_protection:
+    "Let shoppers protect their order against damage, loss & theft for a percentage of the cart value.",
 };
 
 // ── Types ────────────────────────────────────────────────────
@@ -76,10 +96,17 @@ interface SelectedProduct {
 // ── Loader / Action ──────────────────────────────────────────
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const url = new URL(request.url);
   const type = url.searchParams.get("type") || "bulk_price";
-  return json({ type, shop: session.shop });
+  const protection =
+    type === SHIPPING_PROTECTION
+      ? {
+          ...(await getProtectionShopInfo(admin)),
+          shopName: await getShopDisplayName(admin, session.shop),
+        }
+      : null;
+  return json({ type, shop: session.shop, protection });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -172,6 +199,65 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const campaignStartDate = startNow ? new Date() : startDate ? new Date(startDate) : new Date();
   const campaignEndDate = hasEndDate && endDate ? new Date(endDate) : null;
   const finalDiscountType = type === "shipping_discount" && freeShipping ? "free_shipping" : discountType;
+
+  // Shipping protection creates no Shopify discount — it's published to the
+  // storefront through metafields by syncShippingProtection.
+  if (type === SHIPPING_PROTECTION) {
+    const submitted = parseProtectionConfig(formData.get("protectionConfig") as string);
+    const invalid = validateProtection(submitted);
+    if (invalid || !submitted) return json({ success: false, error: invalid });
+    // Fixed fees are entered in the shop currency — record which one.
+    submitted.currencyCode = (await getProtectionShopInfo(admin)).currencyCode;
+
+    // No "scheduled" state: an active campaign's dates gate the widget instead.
+    const protectionStatus = status === "draft" ? "draft" : "active";
+    if (protectionStatus === "active") {
+      const conflict = await findProtectionConflict(shop, submitted);
+      if (conflict) return json({ success: false, error: conflict });
+    }
+
+    // Create the fee and coverage products (never trust ids from the form).
+    const fee = await ensureFeeProduct(
+      admin,
+      { ...submitted, feeProductId: "", feeVariantId: "", componentProductId: "", componentVariantId: "" },
+      null
+    );
+    if ("error" in fee) return json({ success: false, error: fee.error });
+    const protectionConfig = fee.config;
+    const rollbackFeeProduct = () => deleteManagedProducts(admin, fee.createdProductIds);
+
+    try {
+      const created = await db.campaign.create({
+        data: {
+          shop,
+          name: name.trim(),
+          type,
+          status: protectionStatus,
+          ...protectionDiscountColumns(protectionConfig),
+          appliesTo: "all",
+          startDate: campaignStartDate,
+          endDate: campaignEndDate,
+          protectionConfig: JSON.stringify(protectionConfig),
+        },
+      });
+
+      const syncErrors = await syncShippingProtection(admin, shop);
+      if (syncErrors.length > 0) {
+        // Nothing reached the storefront — drop the row rather than leave a
+        // campaign that looks live but isn't, then restore the previous state.
+        await db.campaign.delete({ where: { id: created.id } });
+        await syncShippingProtection(admin, shop);
+        await rollbackFeeProduct();
+        return json({ success: false, error: `Shopify error: ${syncErrors.join(", ")}` });
+      }
+      return redirect("/app/campaigns");
+    } catch (error) {
+      console.error("Failed to create shipping protection campaign:", error);
+      await rollbackFeeProduct();
+      const detail = error instanceof Error ? error.message : String(error);
+      return json({ success: false, error: `Failed to create campaign: ${detail}` });
+    }
+  }
 
   try {
     const shopifyResult = await createShopifyDiscount(admin, {
@@ -825,7 +911,7 @@ function DiscountPreview({
 // ── Main Component ────────────────────────────────────────────
 
 export default function NewCampaign() {
-  const { type, shop } = useLoaderData<typeof loader>();
+  const { type, shop, protection } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -892,6 +978,11 @@ export default function NewCampaign() {
   const [popupDelaySeconds, setPopupDelaySeconds] = useState("");
   const [popupFrequencyValue, setPopupFrequencyValue] = useState("24");
   const [popupFrequencyUnit, setPopupFrequencyUnit] = useState("hours");
+
+  // ── Shipping protection state (shipping_protection only) ──
+  const [protectionConfig, setProtectionConfig] = useState<ProtectionConfigDraft>(() =>
+    defaultProtectionDraft(protection?.shopName || "our store")
+  );
 
   // ── Product / variant selection state ───────────────────────
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([]);
@@ -1008,6 +1099,26 @@ export default function NewCampaign() {
 
   const handleSave = () => {
     if (isSubmitting) return;
+
+    if (type === SHIPPING_PROTECTION) {
+      const protectionError = validateProtection(normalizeProtectionConfig(protectionConfig));
+      if (protectionError) {
+        shopify.toast.show(protectionError, { isError: true });
+        return;
+      }
+      const fd = new FormData();
+      fd.append("name", name);
+      fd.append("type", type);
+      fd.append("status", status);
+      fd.append("startNow", String(startNow));
+      fd.append("startDate", startDate);
+      fd.append("hasEndDate", String(hasEndDate));
+      fd.append("endDate", endDate);
+      fd.append("protectionConfig", JSON.stringify(protectionConfig));
+      submit(fd, { method: "post" });
+      return;
+    }
+
     const isFreeShippingCampaign =
       (type === "shipping_discount" && freeShipping) ||
       (type === "advanced_discount_code" && discountType === "free_shipping");
@@ -1180,7 +1291,8 @@ export default function NewCampaign() {
                   options={[
                     { label: "Active", value: "active" },
                     { label: "Draft", value: "draft" },
-                    { label: "Scheduled", value: "scheduled" },
+                    // Protection has no scheduled state — its dates gate the widget.
+                    ...(type === SHIPPING_PROTECTION ? [] : [{ label: "Scheduled", value: "scheduled" }]),
                   ]}
                   value={status}
                   onChange={setStatus}
@@ -1188,7 +1300,17 @@ export default function NewCampaign() {
               </BlockStack>
             </Card>
 
+            {type === SHIPPING_PROTECTION && (
+              <ShippingProtectionForm
+                config={protectionConfig}
+                onConfigChange={setProtectionConfig}
+                supported={protection?.supported ?? true}
+                currencyCode={protection?.currencyCode || "USD"}
+              />
+            )}
+
             {/* Discount Configuration */}
+            {type !== SHIPPING_PROTECTION && (
             <Card>
               <BlockStack gap="400">
                 <Text as="h2" variant="headingMd">Discount configuration</Text>
@@ -1563,8 +1685,10 @@ export default function NewCampaign() {
                 )}
               </BlockStack>
             </Card>
+            )}
 
             {/* ── Products Card ─────────────────────────────── */}
+            {type !== SHIPPING_PROTECTION && (
             <Card>
               <BlockStack gap="400">
                 <Text as="h2" variant="headingMd">Products</Text>
@@ -1744,6 +1868,7 @@ export default function NewCampaign() {
                 )}
               </BlockStack>
             </Card>
+            )}
 
             {/* ── Discount popup (advanced_discount_code only) ─── */}
             {type === "advanced_discount_code" && (
@@ -1922,6 +2047,12 @@ export default function NewCampaign() {
 
         {/* ── Right Column ─────────────────────────────────── */}
         <Layout.Section variant="oneThird">
+          {type === SHIPPING_PROTECTION ? (
+            <ShippingProtectionPreview
+              config={protectionConfig}
+              currencyCode={protection?.currencyCode || "USD"}
+            />
+          ) : (
           <DiscountPreview
             type={type}
             name={name}
@@ -1936,6 +2067,7 @@ export default function NewCampaign() {
             appliesTo={appliesTo}
             status={status}
           />
+          )}
         </Layout.Section>
       </Layout>
     </Page>
