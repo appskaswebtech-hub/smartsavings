@@ -42,9 +42,10 @@ import {
 } from "../lib/shippingProtection";
 import {
   findProtectionConflict,
+  protectionProductIdsInUse,
   syncShippingProtection,
 } from "../shippingProtection.server";
-import { deleteProtectionProducts } from "../shippingProtectionProduct.server";
+import { sweepProtectionProducts } from "../shippingProtectionProduct.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -459,9 +460,14 @@ async function deleteCampaign(admin: any, campaignId: string): Promise<OpResult>
   if (campaign.type === SHIPPING_PROTECTION) {
     await db.campaign.delete({ where: { id: campaignId } });
     const syncErrors = await syncShippingProtection(admin, campaign.shop);
-    // Its "Premium Shipping Protection" product goes too (only if the app made it).
+    // Its "Premium Shipping Protection" products go too — and so does anything
+    // the app made for a campaign that no longer exists (only tagged products).
+    const deleted = parseProtectionConfig(campaign.protectionConfig, campaign.discountValue);
     syncErrors.push(
-      ...(await deleteProtectionProducts(admin, parseProtectionConfig(campaign.protectionConfig)))
+      ...(await sweepProtectionProducts(admin, await protectionProductIdsInUse(campaign.shop), [
+        deleted?.feeProductId,
+        deleted?.componentProductId,
+      ]))
     );
     return {
       ok: true,

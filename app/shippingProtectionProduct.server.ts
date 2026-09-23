@@ -1,3 +1,4 @@
+import { ApiVersion } from "@shopify/shopify-app-remix/server";
 import type { AdminApiContext } from "@shopify/shopify-app-remix/server";
 import { DEFAULT_FEE_PRODUCT_TITLE, type ProtectionConfig } from "./lib/shippingProtection";
 
@@ -9,6 +10,10 @@ import { DEFAULT_FEE_PRODUCT_TITLE, type ProtectionConfig } from "./lib/shipping
  *
  * Alongside it lives a hidden "coverage" component product that the Cart
  * Transform expands the fee line into and prices (see ensureFeeProduct).
+ *
+ * Both are published to the Online Store — unpublished, /cart/add.js can't add
+ * them — but set to UNLISTED, which keeps them out of the catalog, storefront
+ * search, recommendations and the sitemap while they stay addressable by id.
  *
  * App-managed products carry FEE_PRODUCT_TAG / COMPONENT_PRODUCT_TAG. Only
  * tagged products are ever updated or deleted here, so a product the merchant
@@ -99,14 +104,70 @@ const FEE_PRODUCT_DELETE = `#graphql
     }
   }`;
 
-async function gql(admin: AdminApiContext, query: string, variables?: Record<string, unknown>) {
-  const res = await admin.graphql(query, variables ? { variables } : undefined);
+// Every app-made protection product still in the store, however it got there —
+// the source of truth for the cleanup sweep, since a campaign's saved ids can
+// go stale but the tag can't.
+const PROTECTION_PRODUCTS = `#graphql
+  query ShippingProtectionProducts($query: String!) {
+    products(first: 250, query: $query) {
+      nodes { id createdAt }
+    }
+  }`;
+
+// UNLISTED keeps the product out of collections, storefront search,
+// recommendations, the sitemap and Shopify Catalog while it stays reachable by
+// id — so the cart, Cart Transform and checkout treat it like any active
+// product. Only exists from the 2025-10 Admin API (see setUnlisted).
+const PRODUCT_STATUS_UNLIST = `#graphql
+  mutation ShippingProtectionProductUnlist($product: ProductUpdateInput!) {
+    productUpdate(product: $product) {
+      product { id }
+      userErrors { field message }
+    }
+  }`;
+
+async function gql(
+  admin: AdminApiContext,
+  query: string,
+  variables?: Record<string, unknown>,
+  apiVersion?: ApiVersion
+) {
+  const res = await admin.graphql(query, {
+    ...(variables ? { variables } : {}),
+    ...(apiVersion ? { apiVersion } : {}),
+  });
   const body: any = await res.json();
   // Top-level errors (e.g. a missing scope) come back here, not in userErrors.
   if (body?.errors?.length) {
     throw new Error(body.errors.map((e: any) => e.message).join(", "));
   }
   return body;
+}
+
+/**
+ * Hides a managed product from the storefront catalog.
+ *
+ * ProductStatus.UNLISTED only exists from the 2025-10 Admin API and the app is
+ * pinned to 2025-01, so this one call overrides the version — every other call
+ * here stays on 2025-01, where the publication and media mutations it uses
+ * behave as this file expects.
+ *
+ * Best effort: a failure leaves the product visible (what it was before this
+ * existed), which is no reason to fail the merchant's save.
+ */
+async function setUnlisted(admin: AdminApiContext, productId: string): Promise<void> {
+  try {
+    const result = await gql(
+      admin,
+      PRODUCT_STATUS_UNLIST,
+      { product: { id: productId, status: "UNLISTED" } },
+      ApiVersion.October25
+    );
+    const err = userErrors(result?.data?.productUpdate);
+    if (err) console.error("[shippingProtection] couldn't unlist protection product:", err);
+  } catch (error) {
+    console.error("[shippingProtection] couldn't unlist protection product", error);
+  }
 }
 
 function userErrors(payload: any, key = "userErrors"): string | null {
@@ -175,8 +236,10 @@ async function ensureManagedProduct(
         const err = userErrors(removed?.data?.productDeleteMedia, "mediaUserErrors");
         if (err) return { error: `Couldn't replace the protection icon: ${err}` };
       }
+      // No status here: setUnlisted owns it, and re-asserting ACTIVE on every
+      // sync would put the product back in the catalog.
       const updated = await gql(admin, FEE_PRODUCT_UPDATE, {
-        product: { id: productId, title: spec.title, status: "ACTIVE" },
+        product: { id: productId, title: spec.title },
         media: spec.iconChanged ? media : [],
       });
       const err = userErrors(updated?.data?.productUpdate);
@@ -219,6 +282,10 @@ async function ensureManagedProduct(
   const published = await gql(admin, FEE_PRODUCT_PUBLISH, { id: productId, input: [{ publicationId }] });
   const publishErr = userErrors(published?.data?.publishablePublish);
   if (publishErr) return { error: `Couldn't publish the protection product: ${publishErr}` };
+
+  // Published so the cart can add it, unlisted so nobody can browse to it.
+  // Last, because the create and update above leave it ACTIVE.
+  await setUnlisted(admin, productId);
 
   return { productId, variantId, created };
 }
@@ -324,10 +391,44 @@ export async function deleteManagedProducts(
   return errors;
 }
 
-/** Deletes a campaign's fee and coverage products (only if the app made them). */
-export function deleteProtectionProducts(
+/**
+ * Deletes every app-made protection product the shop no longer needs — the ones
+ * belonging to the campaign just deleted, plus any left behind by an earlier
+ * deletion or a half-finished save.
+ *
+ * `deleteNow` are the deleted campaign's own products, removed whatever their
+ * age. `keepProductIds` are the fee and coverage products of the campaigns that
+ * remain (see protectionProductIdsInUse); every other tagged product is a
+ * leftover and goes too, unless it was made in the last few minutes — that one
+ * is most likely a campaign being saved in another tab, whose row doesn't exist
+ * yet.
+ *
+ * Products are found by the app's own tags and deleteManagedProducts re-checks
+ * the tag before deleting, so nothing the merchant made can be caught by this.
+ */
+const SWEEP_GRACE_MS = 10 * 60 * 1000;
+
+export async function sweepProtectionProducts(
   admin: AdminApiContext,
-  config: Pick<ProtectionConfig, "feeProductId" | "componentProductId"> | null
+  keepProductIds: string[],
+  deleteNow: (string | null | undefined)[] = []
 ): Promise<string[]> {
-  return deleteManagedProducts(admin, [config?.feeProductId, config?.componentProductId]);
+  try {
+    const data = await gql(admin, PROTECTION_PRODUCTS, {
+      query: `tag:${FEE_PRODUCT_TAG} OR tag:${COMPONENT_PRODUCT_TAG}`,
+    });
+    const found: { id: string; createdAt: string }[] = data?.data?.products?.nodes ?? [];
+    const keep = new Set(keepProductIds.filter(Boolean));
+    const doomed = new Set(deleteNow.filter((id): id is string => !!id));
+    const cutoff = Date.now() - SWEEP_GRACE_MS;
+
+    for (const product of found) {
+      if (keep.has(product.id) || doomed.has(product.id)) continue;
+      if (Date.parse(product.createdAt) < cutoff) doomed.add(product.id);
+    }
+    return deleteManagedProducts(admin, [...doomed]);
+  } catch (error) {
+    console.error("[shippingProtection] sweepProtectionProducts failed", error);
+    return [describeFailure(error)];
+  }
 }

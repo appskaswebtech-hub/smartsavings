@@ -260,6 +260,24 @@ export async function findProtectionConflict(
 }
 
 /**
+ * The fee and coverage products the shop's remaining protection campaigns still
+ * need — whatever their status, since pausing a campaign keeps its products so
+ * resuming doesn't churn them. Everything else the app made can go
+ * (sweepProtectionProducts).
+ */
+export async function protectionProductIdsInUse(shop: string): Promise<string[]> {
+  const campaigns = await db.campaign.findMany({
+    where: { shop, type: SHIPPING_PROTECTION },
+    select: { discountValue: true, protectionConfig: true },
+  });
+
+  return campaigns.flatMap((campaign) => {
+    const config = parseProtectionConfig(campaign.protectionConfig, campaign.discountValue);
+    return [config?.feeProductId, config?.componentProductId].filter((id): id is string => !!id);
+  });
+}
+
+/**
  * Checkout-step blocks (information/shipping/payment) only render on Shopify
  * Plus — including Plus-feature development stores, but not e.g. "Basic App
  * Development" ones, which report partnerDevelopment without shopifyPlus.
