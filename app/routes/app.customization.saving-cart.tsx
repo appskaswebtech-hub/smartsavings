@@ -1,11 +1,12 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit } from "@remix-run/react";
 import { useIsSaving } from "../lib/useIsSaving";
-import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Checkbox, Layout, RangeSlider, Banner } from "@shopify/polaris";
+import { Page, BlockStack, InlineStack, Button, Box, TextField, Checkbox, Layout, RangeSlider, Banner } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { ColorPickerInput, StickyPreview, DeviceMockup, LayoutControls, type LayoutValue } from "../components/CustomizationWidgets";
+import { PageHeader, SectionCard } from "../components/Theme";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -61,24 +62,32 @@ export default function SavingOnCart() {
   );
 
   return (
-    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Saving on cart" subtitle='Customize "Saving & Total" widget on cart.' primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: isSaving }}>
+    <Page fullWidth>
+      <div className="ss-page">
+      <PageHeader
+        backTo="/app/customization"
+        backLabel="Customization"
+        title="Saving on cart"
+        subtitle='Customize "Saving & Total" widget on cart.'
+        primaryAction={{ content: "Save", icon: "save", onAction: handleSave, loading: isSaving, disabled: isSaving }}
+      />
       {saved && <Box paddingBlockEnd="400"><Banner tone="success" title="Settings saved!" onDismiss={() => setSaved(false)} /></Box>}
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
-            <Card><InlineStack align="space-between" blockAlign="center"><InlineStack gap="200"><span>👁</span><Text as="h2" variant="headingSm">Display widget on store</Text></InlineStack><Button onClick={() => setEnabled(!enabled)} variant={enabled ? "primary" : undefined} size="slim">{enabled ? "ON" : "OFF"}</Button></InlineStack></Card>
-            <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>✏️</span><Text as="h2" variant="headingSm">Content</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><TextField label='"Total" text' value={totalText} onChange={setTotalText} autoComplete="off" /><TextField label='"Saving" text' value={savingText} onChange={setSavingText} autoComplete="off" /></BlockStack></Card>
-            <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Styles</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><Checkbox label="Show a border for Saving section" checked={showBorder} onChange={setShowBorder} /><RangeSlider label="Border radius" value={borderRadiusVal} onChange={(v) => setBorderRadiusVal(v as number)} min={0} max={20} output suffix="px" /><ColorPickerInput label='"Total" text color' value={totalTextColor} onChange={setTotalTextColor} /><ColorPickerInput label='"Saving" text color' value={savingTextColor} onChange={setSavingTextColor} /><ColorPickerInput label="Border color" value={borderColor} onChange={setBorderColor} /></BlockStack></Card>
-            <Card><BlockStack gap="400"><InlineStack gap="200"><span>📐</span><Text as="h2" variant="headingSm">Size &amp; spacing</Text></InlineStack><LayoutControls value={layout} onChange={setLayout} /></BlockStack></Card>
+            <SectionCard title="Display widget on store" icon="eye" tone="blue" actions={<Button onClick={() => setEnabled(!enabled)} variant={enabled ? "primary" : undefined} size="slim">{enabled ? "ON" : "OFF"}</Button>} />
+            <SectionCard title="Content" icon="text" tone="sky" actions={<Button variant="plain" size="slim">Reset to default</Button>}><BlockStack gap="400"><TextField label='"Total" text' value={totalText} onChange={setTotalText} autoComplete="off" /><TextField label='"Saving" text' value={savingText} onChange={setSavingText} autoComplete="off" /></BlockStack></SectionCard>
+            <SectionCard title="Styles" icon="palette" tone="amber" actions={<Button variant="plain" size="slim">Reset to default</Button>}><BlockStack gap="400"><Checkbox label="Show a border for Saving section" checked={showBorder} onChange={setShowBorder} /><RangeSlider label="Border radius" value={borderRadiusVal} onChange={(v) => setBorderRadiusVal(v as number)} min={0} max={20} output suffix="px" /><ColorPickerInput label='"Total" text color' value={totalTextColor} onChange={setTotalTextColor} /><ColorPickerInput label='"Saving" text color' value={savingTextColor} onChange={setSavingTextColor} /><ColorPickerInput label="Border color" value={borderColor} onChange={setBorderColor} /></BlockStack></SectionCard>
+            <SectionCard title="Size & spacing" icon="ruler" tone="mint"><BlockStack gap="400"><LayoutControls value={layout} onChange={setLayout} /></BlockStack></SectionCard>
           </BlockStack>
         </Layout.Section>
         <Layout.Section variant="oneThird">
-          <StickyPreview><Card><BlockStack gap="400">
-            <InlineStack align="space-between"><Text as="h2" variant="headingSm">Preview</Text><InlineStack gap="100"><Button size="slim" variant={previewDevice === "desktop" ? "primary" : undefined} onClick={() => setPreviewDevice("desktop")}>🖥</Button><Button size="slim" variant={previewDevice === "mobile" ? "primary" : undefined} onClick={() => setPreviewDevice("mobile")}>📱</Button></InlineStack></InlineStack>
+          <StickyPreview><SectionCard title="Preview" icon="monitor" tone="sky" actions={<InlineStack gap="100"><Button size="slim" variant={previewDevice === "desktop" ? "primary" : undefined} onClick={() => setPreviewDevice("desktop")}>🖥</Button><Button size="slim" variant={previewDevice === "mobile" ? "primary" : undefined} onClick={() => setPreviewDevice("mobile")}>📱</Button></InlineStack>}><BlockStack gap="400">
             <Box background="bg-surface-secondary" borderRadius="300" padding="200"><DeviceMockup device={previewDevice}><CartPreview /></DeviceMockup></Box>
-          </BlockStack></Card></StickyPreview>
+          </BlockStack></SectionCard></StickyPreview>
         </Layout.Section>
       </Layout>
+      </div>
     </Page>
   );
 }

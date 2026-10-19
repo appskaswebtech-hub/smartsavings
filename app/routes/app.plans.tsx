@@ -1,253 +1,3 @@
-// import { useState, useEffect } from "react";
-// import {
-//   json,
-//   type ActionFunctionArgs,
-//   type LoaderFunctionArgs,
-// } from "@remix-run/node";
-// import { useFetcher, useLoaderData } from "@remix-run/react";
-
-// // ✅ Import from plan-definitions (not plans.ts — avoids route name collision)
-// import { PLANS, type PlanId } from "../plan-definitions";
-
-// // ─── Loader ───────────────────────────────────────────────────────────────────
-
-// export const loader = async ({ request }: LoaderFunctionArgs) => {
-//   const { authenticate } = await import("../shopify.server");
-//   const { syncSubscriptionFromShopify } = await import("../billing.server");
-
-//   const { admin, session } = await authenticate.admin(request);
-
-//   let planId: PlanId | null = null;
-//   try {
-//     const result = await syncSubscriptionFromShopify(admin, session.shop);
-//     planId = result.planId;
-//   } catch (err) {
-//     console.error("[plans loader] subscription sync failed:", err);
-//   }
-
-//   const appHandle = process.env.SHOPIFY_APP_HANDLE ?? "";
-//   const storeHandle = session.shop.replace(/\.myshopify\.com$/, "");
-//   const managedPricingUrl = `https://admin.shopify.com/store/${storeHandle}/charges/${appHandle}/pricing_plans`;
-
-//   return json({
-//     hasActivePlan: planId !== null,
-//     activePlanId: planId,
-//     managedPricingUrl,
-//   });
-// };
-
-// // ─── Action ───────────────────────────────────────────────────────────────────
-
-// export const action = async ({ request }: ActionFunctionArgs) => {
-//   const { authenticate } = await import("../shopify.server");
-//   const { session } = await authenticate.admin(request);
-
-//   const formData = await request.formData();
-//   const planId = formData.get("planId") as string;
-
-//   if (!PLANS[planId as PlanId]) {
-//     return json({ error: "Invalid plan selected", redirectUrl: null }, { status: 400 });
-//   }
-
-//   const appHandle = process.env.SHOPIFY_APP_HANDLE ?? "";
-//   const storeHandle = session.shop.replace(/\.myshopify\.com$/, "");
-//   const redirectUrl = `https://admin.shopify.com/store/${storeHandle}/charges/${appHandle}/pricing_plans`;
-
-//   // Return the URL as JSON — client uses App Bridge to navigate the top frame.
-//   // A server-side redirect() lands in the iframe which Shopify blocks (X-Frame-Options: deny).
-//   return json({ redirectUrl, error: null });
-// };
-
-// // ─── Plans Page ───────────────────────────────────────────────────────────────
-
-// export default function PlansPage() {
-//   const { hasActivePlan, activePlanId, managedPricingUrl } =
-//     useLoaderData<typeof loader>();
-
-//   const [selected, setSelected] = useState<string | null>(activePlanId ?? null);
-//   const fetcher = useFetcher<{ redirectUrl: string | null; error: string | null }>();
-//   const planList = Object.values(PLANS);
-//   const selectedPlan = planList.find((p) => p.id === selected);
-//   const isSubmitting = fetcher.state !== "idle";
-
-//   // Navigate the top frame out of Shopify's iframe to the pricing page
-//   useEffect(() => {
-//     if (fetcher.data?.redirectUrl) {
-//       window.open(fetcher.data.redirectUrl, "_top");
-//     }
-//   }, [fetcher.data]);
-
-//   function handleActivate() {
-//     if (!selected) return;
-//     fetcher.submit(
-//       { planId: selected },
-//       { method: "POST", action: "/app/plans" }
-//     );
-//   }
-
-//   return (
-//     <>
-//       <style>{`
-//         .plans-grid {
-//           display: grid;
-//           grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-//           gap: 20px;
-//           margin-bottom: 2rem;
-//         }
-//         .plan-card {
-//           border-radius: 16px;
-//           padding: 1.5rem;
-//           cursor: pointer;
-//           position: relative;
-//           outline: none;
-//           transition: transform 0.15s, box-shadow 0.15s;
-//         }
-//         .plan-card:hover {
-//           transform: translateY(-3px);
-//           box-shadow: 0 12px 32px rgba(0,0,0,0.1);
-//         }
-//         .plans-cta {
-//           border: none;
-//           border-radius: 99px;
-//           padding: 13px 40px;
-//           font-size: 15px;
-//           font-weight: 700;
-//           cursor: pointer;
-//           transition: opacity 0.15s, transform 0.1s;
-//           letter-spacing: 0.01em;
-//         }
-//         .plans-cta:active  { transform: scale(0.97); }
-//         .plans-cta:disabled { opacity: 0.45; cursor: not-allowed; }
-//       `}</style>
-
-//       <div style={{ maxWidth: 900, margin: "0 auto", padding: "2.5rem 1.5rem" }}>
-
-//         {/* Header */}
-//         <div style={{ marginBottom: "2.5rem" }}>
-//           <h1 style={{ fontSize: 28, fontWeight: 800, color: "#111827", margin: "0 0 8px", letterSpacing: "-0.025em" }}>
-//             Plans &amp; Billing
-//           </h1>
-//           <p style={{ fontSize: 15, color: "#6b7280", margin: 0 }}>
-//             {hasActivePlan
-//               ? `You're on the ${activePlanId ? PLANS[activePlanId]?.name : ""} plan. Upgrade or change any time.`
-//               : "Choose a plan to activate your app. Billed securely through Shopify."}
-//           </p>
-//         </div>
-
-//         {/* Active plan banner */}
-//         {hasActivePlan && activePlanId && (
-//           <div style={{
-//             background: "#E1F5EE", border: "1px solid #1D9E75", borderRadius: 12,
-//             padding: "12px 20px", marginBottom: "1.5rem",
-//             display: "flex", alignItems: "center", gap: 10,
-//             fontSize: 14, color: "#085041", fontWeight: 500,
-//           }}>
-//             <span style={{ fontSize: 18 }}>✓</span>
-//             Active plan: <strong>{PLANS[activePlanId]?.name}</strong>. Managed through Shopify billing.
-//           </div>
-//         )}
-
-//         {/* Plan cards */}
-//         <div className="plans-grid" role="radiogroup">
-//           {planList.map((plan) => {
-//             const isSelected = selected === plan.id;
-//             const isActive = activePlanId === plan.id;
-//             return (
-//               <div
-//                 key={plan.id}
-//                 className="plan-card"
-//                 role="radio"
-//                 aria-checked={isSelected}
-//                 tabIndex={0}
-//                 onClick={() => setSelected(plan.id)}
-//                 onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setSelected(plan.id)}
-//                 style={{
-//                   border: isSelected ? `2.5px solid ${plan.color}` : "1.5px solid #e5e7eb",
-//                   background: isSelected ? plan.lightBg : "#fff",
-//                 }}
-//               >
-//                 {plan.badge && (
-//                   <span style={{
-//                     position: "absolute", top: -13, left: "50%", transform: "translateX(-50%)",
-//                     background: plan.color, color: "#fff", fontSize: 11, fontWeight: 700,
-//                     borderRadius: 99, padding: "3px 14px", whiteSpace: "nowrap",
-//                   }}>
-//                     {plan.badge}
-//                   </span>
-//                 )}
-//                 {isActive && (
-//                   <span style={{
-//                     position: "absolute", top: 12, right: 12,
-//                     background: plan.color, color: "#fff", fontSize: 10,
-//                     fontWeight: 700, borderRadius: 99, padding: "2px 10px", textTransform: "uppercase",
-//                   }}>
-//                     Current
-//                   </span>
-//                 )}
-
-//                 <div style={{ marginBottom: 14 }}>
-//                   <p style={{ fontSize: 11, fontWeight: 700, color: plan.color, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-//                     {plan.name}
-//                   </p>
-//                   <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-//                     <span style={{ fontSize: 34, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em" }}>
-//                       ${plan.price.toFixed(2)}
-//                     </span>
-//                     <span style={{ fontSize: 13, color: "#9ca3af" }}>/month</span>
-//                   </div>
-//                 </div>
-
-//                 <div style={{ borderTop: "1px solid #f3f4f6", paddingTop: 14 }}>
-//                   {plan.features.map((f) => (
-//                     <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 9 }}>
-//                       <span style={{ color: plan.color, fontSize: 13, flexShrink: 0, marginTop: 1, fontWeight: 700 }}>✓</span>
-//                       <span style={{ fontSize: 13, color: "#374151" }}>{f}</span>
-//                     </div>
-//                   ))}
-//                 </div>
-
-//                 {isSelected && !isActive && (
-//                   <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: plan.color }}>● Selected</div>
-//                 )}
-//               </div>
-//             );
-//           })}
-//         </div>
-
-//         {/* CTA footer */}
-//         <div style={{
-//           display: "flex", alignItems: "center", justifyContent: "space-between",
-//           flexWrap: "wrap", gap: 12, paddingTop: "1rem", borderTop: "1px solid #f3f4f6",
-//         }}>
-//           <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>
-//             🔒 Billed securely through Shopify · Cancel any time
-//           </p>
-//           <button
-//             className="plans-cta"
-//             disabled={!selected || isSubmitting || (hasActivePlan && selected === activePlanId)}
-//             onClick={handleActivate}
-//             style={{
-//               background: selectedPlan ? selectedPlan.color : "#e5e7eb",
-//               color: selectedPlan ? "#fff" : "#9ca3af",
-//             }}
-//           >
-//             {isSubmitting
-//               ? "Redirecting to Shopify…"
-//               : hasActivePlan && selected === activePlanId
-//               ? "Current plan"
-//               : selectedPlan
-//               ? hasActivePlan
-//                 ? `Switch to ${selectedPlan.name} — $${selectedPlan.price.toFixed(2)}/mo`
-//                 : `Activate ${selectedPlan.name} — $${selectedPlan.price.toFixed(2)}/mo`
-//               : "Select a plan"}
-//           </button>
-//         </div>
-//       </div>
-//     </>
-//   );
-// }
-
-
 import { useState, useEffect } from "react";
 import {
   json,
@@ -308,16 +58,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 const TRIAL_DAYS = 7;
 
-export default function PlansPage() {
-  const { hasActivePlan, activePlanId, managedPricingUrl } =
-    useLoaderData<typeof loader>();
+type IconName = "bag" | "bolt" | "crown" | "card" | "refresh" | "shield" | "support";
 
+function PlanIcon({ name }: { name: IconName }) {
+  const shared = { width: 30, height: 30, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (name === "bag") return <svg {...shared}><path d="M5 8h14l1 13H4L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg>;
+  if (name === "bolt") return <svg {...shared} fill="currentColor" stroke="none"><path d="m13.4 1-9 12h6.4L9.9 23l10-13h-6.6L13.4 1Z"/></svg>;
+  if (name === "crown") return <svg {...shared}><path d="m2 7 5 5 5-7 5 7 5-5-2 12H4L2 7Z"/><path d="M5 22h14"/></svg>;
+  if (name === "card") return <svg {...shared}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>;
+  if (name === "refresh") return <svg {...shared}><path d="M20 11a8 8 0 0 0-14-5L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14 5l2-2"/><path d="M15 16h5v5"/></svg>;
+  if (name === "shield") return <svg {...shared}><path d="m12 2 9 4v6c0 6-4.5 9-9 10-4.5-1-9-4-9-10V6l9-4Z"/><path d="m8 12 3 3 5-6"/></svg>;
+  return <svg {...shared}><path d="M3 13v-2a9 9 0 0 1 18 0v2"/><rect x="2" y="12" width="4" height="7" rx="2"/><rect x="18" y="12" width="4" height="7" rx="2"/><path d="M20 19a5 5 0 0 1-5 3h-3"/></svg>;
+}
+
+const planDescriptions = [
+  "Perfect for small stores getting started with discounts and promotions.",
+  "Best for growing businesses with advanced discount and marketing tools.",
+  "For high-volume stores that need unlimited discounts and full control.",
+];
+
+export default function PlansPage() {
+  const { hasActivePlan, activePlanId, managedPricingUrl } = useLoaderData<typeof loader>();
   const [selected, setSelected] = useState<string | null>(activePlanId ?? null);
   const fetcher = useFetcher<{ redirectUrl: string | null; error: string | null }>();
   const planList = Object.values(PLANS);
   const selectedPlan = planList.find((p) => p.id === selected);
   const isSubmitting = fetcher.state !== "idle";
 
+  // Existing billing flow deliberately preserved. Never compute a fake yearly rate.
   useEffect(() => {
     if (fetcher.data?.redirectUrl) {
       window.open(fetcher.data.redirectUrl, "_top");
@@ -326,205 +94,135 @@ export default function PlansPage() {
 
   function handleActivate() {
     if (!selected) return;
-    fetcher.submit(
-      { planId: selected },
-      { method: "POST", action: "/app/plans" }
-    );
+    fetcher.submit({ planId: selected }, { method: "POST", action: "/app/plans" });
   }
 
   return (
-    <>
+    <div className="ss-pricing-page">
       <style>{`
-        .plans-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-          gap: 20px;
-          margin-bottom: 2rem;
-        }
-        .plan-card {
-          border-radius: 16px;
-          padding: 1.5rem;
-          cursor: pointer;
-          position: relative;
-          outline: none;
-          transition: transform 0.15s, box-shadow 0.15s;
-        }
-        .plan-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 12px 32px rgba(0,0,0,0.1);
-        }
-        .plans-cta {
-          border: none;
-          border-radius: 99px;
-          padding: 13px 40px;
-          font-size: 15px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: opacity 0.15s, transform 0.1s;
-          letter-spacing: 0.01em;
-        }
-        .plans-cta:active  { transform: scale(0.97); }
-        .plans-cta:disabled { opacity: 0.45; cursor: not-allowed; }
-        .trial-badge {
-          display: inline-block;
-          background: #FEF3C7;
-          color: #92400E;
-          font-size: 11px;
-          font-weight: 700;
-          border-radius: 99px;
-          padding: 3px 10px;
-          margin-top: 6px;
-        }
+        .ss-pricing-page{    background: radial-gradient(ellipse at 76% 3%, rgba(151, 190, 255, .28) 0, rgba(151, 190, 255, 0) 30%), radial-gradient(ellipse at 87% 100%, rgba(173, 201, 255, .24) 0, rgba(173, 201, 255, 0) 28%), linear-gradient(135deg, #f4f8ff 0%, #edf5ff 52%, #f8fbff 100%);min-height:100vh;padding:28px 24px 36px;color:#090e27;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        .ss-pricing-page *{box-sizing:border-box}
+        .ss-pricing-wrap{max-width:1210px;margin:0 auto}
+        .ss-pricing-top{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:36px}
+        .ss-pricing-eyebrow{font-size:14px;letter-spacing:.01em;font-weight:800;color:#0b4bf0;margin-bottom:8px}
+        .ss-pricing-title{margin:0 0 4px;font-size:clamp(27px,3vw,38px);font-weight:850;line-height:1.13;letter-spacing:-.045em;color:#070c23}
+        .ss-pricing-subtitle{font-size:19px;line-height:1.5;color:#666b7e;margin:0 0 12px}
+        .ss-pricing-notice{display:inline-flex;align-items:center;gap:10px;background:#fff5ce;border:1px solid #ffa900;padding:12px 22px;border-radius:13px;color:#a84c00;font-size:15px;line-height:1.4}
+        .ss-pricing-gift{font-size:23px;line-height:1}
+        .ss-pricing-billing{display:flex;gap:18px;align-items:center;white-space:nowrap;margin-bottom:17px;font-size:15px;font-weight:700;color:#707487}
+        .ss-pricing-monthly{color:#0b4bf0}
+        .ss-pricing-switch{width:57px;height:32px;border:0;border-radius:99px;background:#0b4bf0;padding:4px;display:flex;align-items:center;justify-content:flex-end;cursor:not-allowed;opacity:1}
+        .ss-pricing-switch span{width:25px;height:25px;border-radius:50%;background:white;box-shadow:0 2px 5px #1112}
+        .ss-pricing-save{font-size:12px;color:#009762;background:#dff7ed;border-radius:99px;padding:10px 15px}
+        .ss-pricing-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+        .ss-pricing-card{--accent:#5550ff;--tint:#efedff;position:relative;display:flex;flex-direction:column;min-height:640px;overflow:visible;background:#fff;border:1.5px solid #edf0f4;border-radius:22px;padding:22px 28px 24px;transition:box-shadow .25s,transform .25s,border-color .25s;outline:none}
+        .ss-pricing-card:hover{transform:translateY(-5px);box-shadow:0 18px 48px #1a245217}
+        .ss-pricing-card:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+        .ss-pricing-card[data-tier="0"]{--accent:#554cff;--tint:#fff0d8}
+        .ss-pricing-card[data-tier="1"]{--accent:#554cff;--tint:#eceaff;border-color:#c9c6ff}
+        .ss-pricing-card[data-tier="2"]{--accent:#009f63;--tint:#dff7ed}
+        .ss-pricing-card.is-selected{border-color:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 15%,transparent)}
+        .ss-pricing-card:before{content:"";pointer-events:none;position:absolute;top:0;right:0;width:56%;height:82px;background:var(--tint);border-radius:0 20px 0 100%;opacity:.5}
+        .ss-pricing-card-main{position:relative;z-index:1;flex:1;display:flex;flex-direction:column}
+        .ss-pricing-icon{width:64px;height:64px;border-radius:20px;background:var(--tint);color:var(--accent);display:flex;align-items:center;justify-content:center;margin:0 0 14px}
+        .ss-pricing-card[data-tier="0"] .ss-pricing-icon{color:#e78b00}
+        .ss-pricing-planname{margin:0;font-size:15px;font-weight:800;letter-spacing:.025em;color:#686c7c;text-transform:uppercase}
+        .ss-pricing-price{display:flex;align-items:baseline;gap:6px;margin-top:2px;margin-bottom:5px}
+        .ss-pricing-price strong{font-size:clamp(34px,3vw,46px);font-weight:850;letter-spacing:-.065em;line-height:1.1;color:#070c23}
+        .ss-pricing-price span{color:#9297a9;font-size:16px}
+        .ss-pricing-trial{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:99px;background:#fff2bf;color:#b24e00;font-size:14px;font-weight:700;margin-bottom:9px}
+        .ss-pricing-description{min-height:49px;margin:0 0 15px;font-size:16px;line-height:1.45;color:#404761}
+        .ss-pricing-rule{height:1px;background:#e7e9f0;margin-bottom:18px}
+        .ss-pricing-features{display:flex;flex-direction:column;gap:14px;padding:0;margin:0 0 22px;list-style:none}
+        .ss-pricing-features li{display:flex;gap:18px;align-items:flex-start;font-size:15px;line-height:1.4;color:#303958}
+        .ss-pricing-check{flex:none;color:#0b4bf0;font-size:22px;line-height:19px;font-weight:700}
+        .ss-pricing-popular{position:absolute;z-index:3;left:50%;top:-16px;transform:translateX(-50%);border-radius:99px;background:#0b4bf0;color:white;padding:8px 21px;font-size:13px;font-weight:800;white-space:nowrap;box-shadow:0 4px 12px #554cff33}
+        .ss-pricing-current{position:absolute;right:22px;top:28px;z-index:3;background:#e4f6ed;color:#008555;border-radius:99px;padding:5px 10px;font-size:11px;font-weight:800}
+        .ss-pricing-card-button{position:relative;z-index:1;width:100%;border:1.5px solid #0b4bf0;background:color-mix(in srgb,var(--tint) 47%,white);color:var(--accent);border-radius:15px;padding:15px 10px;font-size:17px;font-weight:800;cursor:pointer;transition:transform .2s,box-shadow .2s,background .2s}
+        .ss-pricing-card-button:hover{transform:translateY(-2px);box-shadow:0 8px 20px #2b2c4020}
+        .ss-pricing-card[data-tier="1"] .ss-pricing-card-button{background:#0b4bf0;color:white}
+        .ss-pricing-card-button[aria-pressed="true"]{box-shadow:inset 0 0 0 1px var(--accent)}
+        .ss-pricing-card-button:disabled{cursor:default;opacity:.7}
+        .ss-pricing-trust{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:#fff;border-radius:20px;padding:20px 22px;margin-top:27px;gap:0}
+        .ss-pricing-trust-item{display:flex;align-items:center;gap:16px;padding:0 20px;border-right:1px solid #e6e8ef}
+        .ss-pricing-trust-item:first-child{padding-left:0}.ss-pricing-trust-item:last-child{border-right:0;padding-right:0}
+        .ss-pricing-trust-icon{flex:none;width:54px;height:54px;display:flex;align-items:center;justify-content:center;border-radius:18px;color:#0b4bf0;background:#f0efff}
+        .ss-pricing-trust-item strong{display:block;font-size:14px;color:#111629;margin-bottom:4px}
+        .ss-pricing-trust-item small{display:block;color:#6d7284;font-size:12px;line-height:1.4}
+        .ss-pricing-footer{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-top:22px;padding:18px 6px;border-top:1px solid #e5e7ed}
+        .ss-pricing-footer-note{color:#767d90;font-size:13px;line-height:1.7}
+        .ss-pricing-footer-note p{margin:0}
+        .plans-cta{border:0;border-radius:99px;min-width:230px;padding:15px 26px;color:white;background:#0b4bf0;font-size:15px;font-weight:800;cursor:pointer;transition:transform .2s,box-shadow .2s}
+        .plans-cta:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 25px #0b4bf040}
+        .plans-cta:disabled{opacity:.45;cursor:not-allowed}
+        .ss-pricing-error{margin-top:10px;color:#b42318;font-size:13px}
+        @media(max-width:1050px){.ss-pricing-card{padding:22px 20px;min-height:610px}.ss-pricing-grid{gap:14px}.ss-pricing-trust-item{padding:0 12px;gap:9px}.ss-pricing-trust-icon{width:44px;height:44px}}
+        /* iPads in portrait: one centred column instead of three ~230px cards. */
+        @media(max-width:900px){.ss-pricing-grid{grid-template-columns:1fr;gap:27px;max-width:560px;margin-inline:auto}.ss-pricing-card{min-height:0}.ss-pricing-description{min-height:0}}
+        @media(max-width:780px){.ss-pricing-top{align-items:flex-start;flex-direction:column;gap:10px}.ss-pricing-billing{margin:0}.ss-pricing-grid{grid-template-columns:1fr;gap:27px}.ss-pricing-card{min-height:0}.ss-pricing-description{min-height:0}.ss-pricing-card-main{min-height:375px}.ss-pricing-trust{grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}.ss-pricing-trust-item{border-right:0;padding:0}.ss-pricing-footer{align-items:stretch;flex-direction:column}.plans-cta{width:100%}}
+        @media(max-width:480px){.ss-pricing-page{padding:24px 14px}.ss-pricing-title{font-size:29px}.ss-pricing-subtitle{font-size:16px}.ss-pricing-notice{font-size:12px;padding:10px}.ss-pricing-billing{gap:10px;flex-wrap:wrap}.ss-pricing-save{padding:7px 10px}.ss-pricing-trust{grid-template-columns:1fr}.ss-pricing-card-main{min-height:0}.ss-pricing-features{margin-bottom:35px}}
       `}</style>
-
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "2.5rem 1.5rem" }}>
-
-        {/* Header */}
-        <div style={{ marginBottom: "2.5rem" }}>
-          <h1 style={{ fontSize: 28, fontWeight: 800, color: "#111827", margin: "0 0 8px", letterSpacing: "-0.025em" }}>
-            Plans &amp; Billing
-          </h1>
-          <p style={{ fontSize: 15, color: "#6b7280", margin: "0 0 10px" }}>
-            {hasActivePlan
-              ? `You're on the ${activePlanId ? PLANS[activePlanId]?.name : ""} plan. Upgrade or change any time.`
-              : "Choose a plan to start your free trial. Billed securely through Shopify."}
-          </p>
-          {/* Trial announcement */}
-          {!hasActivePlan && (
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: 8,
-              background: "#FEF3C7", border: "1px solid #F59E0B",
-              borderRadius: 10, padding: "8px 16px",
-              fontSize: 13, color: "#92400E", fontWeight: 600,
-            }}>
-              🎁 All plans include a <strong>{TRIAL_DAYS}-day free trial</strong> — no charges until your trial ends.
-            </div>
-          )}
+      <div className="ss-pricing-wrap">
+        <div className="ss-pricing-top">
+          <div>
+            <div className="ss-pricing-eyebrow">PLANS &amp; BILLING</div>
+            <h1 className="ss-pricing-title">Choose the right plan for your business</h1>
+            <p className="ss-pricing-subtitle">Start your 7-day free trial. Upgrade, downgrade or cancel anytime.</p>
+            {!hasActivePlan && <div className="ss-pricing-notice"><span className="ss-pricing-gift">🎁</span><span>All plans include a <strong>{TRIAL_DAYS}-day free trial</strong> — no charges until your trial ends.</span></div>}
+          </div>
+          {/* Yearly is intentionally disabled until a real yearly Shopify billing plan exists. */}
+          <div className="ss-pricing-billing" aria-label="Monthly billing only; yearly billing not available">
+            <span className="ss-pricing-monthly">Monthly</span>
+            <button className="ss-pricing-switch" type="button" disabled title="Yearly billing is not configured yet" aria-label="Monthly billing enabled, yearly unavailable"><span /></button>
+            <span title="Yearly billing is not configured yet">Yearly</span>
+            <span className="ss-pricing-save" title="Available only when yearly billing is configured">Save up to 20%</span>
+          </div>
         </div>
 
-        {/* Active plan banner */}
-        {hasActivePlan && activePlanId && (
-          <div style={{
-            background: "#E1F5EE", border: "1px solid #1D9E75", borderRadius: 12,
-            padding: "12px 20px", marginBottom: "1.5rem",
-            display: "flex", alignItems: "center", gap: 10,
-            fontSize: 14, color: "#085041", fontWeight: 500,
-          }}>
-            <span style={{ fontSize: 18 }}>✓</span>
-            Active plan: <strong>{PLANS[activePlanId]?.name}</strong>. Managed through Shopify billing.
-          </div>
-        )}
+        {hasActivePlan && activePlanId && <div className="ss-pricing-notice" style={{marginBottom:25,background:"#e9f8ef",borderColor:"#78ce9f",color:"#086b43"}}>✓ Active plan: <strong>{PLANS[activePlanId]?.name}</strong>. Managed through Shopify billing.</div>}
 
-        {/* Plan cards */}
-        <div className="plans-grid" role="radiogroup">
-          {planList.map((plan) => {
+        <div className="ss-pricing-grid" role="radiogroup" aria-label="Subscription plans">
+          {planList.map((plan, index) => {
             const isSelected = selected === plan.id;
             const isActive = activePlanId === plan.id;
             return (
-              <div
-                key={plan.id}
-                className="plan-card"
-                role="radio"
-                aria-checked={isSelected}
-                tabIndex={0}
-                onClick={() => setSelected(plan.id)}
-                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setSelected(plan.id)}
-                style={{
-                  border: isSelected ? `2.5px solid ${plan.color}` : "1.5px solid #e5e7eb",
-                  background: isSelected ? plan.lightBg : "#fff",
-                }}
-              >
-                {plan.badge && (
-                  <span style={{
-                    position: "absolute", top: -13, left: "50%", transform: "translateX(-50%)",
-                    background: plan.color, color: "#fff", fontSize: 11, fontWeight: 700,
-                    borderRadius: 99, padding: "3px 14px", whiteSpace: "nowrap",
-                  }}>
-                    {plan.badge}
-                  </span>
-                )}
-                {isActive && (
-                  <span style={{
-                    position: "absolute", top: 12, right: 12,
-                    background: plan.color, color: "#fff", fontSize: 10,
-                    fontWeight: 700, borderRadius: 99, padding: "2px 10px", textTransform: "uppercase",
-                  }}>
-                    Current
-                  </span>
-                )}
-
-                <div style={{ marginBottom: 14 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: plan.color, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    {plan.name}
-                  </p>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-                    <span style={{ fontSize: 34, fontWeight: 800, color: "#111827", letterSpacing: "-0.03em" }}>
-                      ${plan.price.toFixed(2)}
-                    </span>
-                    <span style={{ fontSize: 13, color: "#9ca3af" }}>/month</span>
-                  </div>
-                  {/* Trial badge per card */}
-                  {!isActive && (
-                    <div className="trial-badge">
-                      🎁 {TRIAL_DAYS}-day free trial
-                    </div>
-                  )}
+              <article className={`ss-pricing-card${isSelected ? " is-selected" : ""}`} data-tier={Math.min(index,2)} key={plan.id}>
+                {plan.badge && <div className="ss-pricing-popular">{plan.badge}</div>}
+                {isActive && <div className="ss-pricing-current">CURRENT</div>}
+                <div className="ss-pricing-card-main">
+                  <div className="ss-pricing-icon"><PlanIcon name={index === 0 ? "bag" : index === 1 ? "bolt" : "crown"}/></div>
+                  <h2 className="ss-pricing-planname">{plan.name}</h2>
+                  <div className="ss-pricing-price"><strong>${plan.price.toFixed(2)}</strong><span>/month</span></div>
+                  {!isActive && <div className="ss-pricing-trial"><span>🎁</span>{TRIAL_DAYS}-day free trial</div>}
+                  <p className="ss-pricing-description">{planDescriptions[index] ?? "Find the right fit for your business."}</p>
+                  <div className="ss-pricing-rule"/>
+                  <ul className="ss-pricing-features">{plan.features.map((feature) => <li key={feature}><span className="ss-pricing-check" aria-hidden="true">✓</span><span>{feature}</span></li>)}</ul>
                 </div>
-
-                <div style={{ borderTop: "1px solid #f3f4f6", paddingTop: 14 }}>
-                  {plan.features.map((f) => (
-                    <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 9 }}>
-                      <span style={{ color: plan.color, fontSize: 13, flexShrink: 0, marginTop: 1, fontWeight: 700 }}>✓</span>
-                      <span style={{ fontSize: 13, color: "#374151" }}>{f}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {isSelected && !isActive && (
-                  <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: plan.color }}>● Selected</div>
-                )}
-              </div>
+                <button type="button" className="ss-pricing-card-button" role="radio" aria-checked={isSelected} aria-pressed={isSelected} onClick={() => setSelected(plan.id)}>{isActive ? "Current Plan" : `Select ${plan.name}`}</button>
+              </article>
             );
           })}
         </div>
 
-        {/* CTA footer */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          flexWrap: "wrap", gap: 12, paddingTop: "1rem", borderTop: "1px solid #f3f4f6",
-        }}>
-          <div>
-            <p style={{ fontSize: 12, color: "#9ca3af", margin: "0 0 2px" }}>
-              🔒 Billed securely through Shopify · Cancel any time
-            </p>
-            {selectedPlan && !hasActivePlan && (
-              <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>
-                Then ${selectedPlan.price.toFixed(2)}/month after {TRIAL_DAYS}-day trial
-              </p>
-            )}
-          </div>
-          <button
-            className="plans-cta"
-            disabled={!selected || isSubmitting || (hasActivePlan && selected === activePlanId)}
-            onClick={handleActivate}
-            style={{
-              background: selectedPlan ? selectedPlan.color : "#e5e7eb",
-              color: selectedPlan ? "#fff" : "#9ca3af",
-            }}
-          >
-            {isSubmitting
-              ? "Redirecting to Shopify…"
-              : hasActivePlan && selected === activePlanId
-              ? "Current plan"
-              : selectedPlan
-              ? hasActivePlan
-                ? `Switch to ${selectedPlan.name} — $${selectedPlan.price.toFixed(2)}/mo`
-                : `Start ${TRIAL_DAYS}-Day Free Trial`
-              : "Select a plan"}
-          </button>
+        <div className="ss-pricing-trust">
+          <div className="ss-pricing-trust-item"><div className="ss-pricing-trust-icon"><PlanIcon name="card"/></div><div><strong>Secure billing</strong><small>Billed securely through Shopify</small></div></div>
+          <div className="ss-pricing-trust-item"><div className="ss-pricing-trust-icon"><PlanIcon name="refresh"/></div><div><strong>Cancel anytime</strong><small>No long-term contracts</small></div></div>
+          <div className="ss-pricing-trust-item"><div className="ss-pricing-trust-icon"><PlanIcon name="shield"/></div><div><strong>7-day free trial</strong><small>No charges until your trial ends</small></div></div>
+          <div className="ss-pricing-trust-item"><div className="ss-pricing-trust-icon"><PlanIcon name="support"/></div><div><strong>Dedicated support</strong><small>We're here to help you grow</small></div></div>
         </div>
 
+        {/* KEEP EXISTING SELECT-THEN-ACTIVATE BILLING FUNCTIONALITY */}
+        <div className="ss-pricing-footer">
+          <div className="ss-pricing-footer-note">
+            <p>🔒 Billed securely through Shopify · Cancel any time</p>
+            {selectedPlan && !hasActivePlan && <p>Then ${selectedPlan.price.toFixed(2)}/month after {TRIAL_DAYS}-day trial</p>}
+            {fetcher.data?.error && <p className="ss-pricing-error" role="alert">{fetcher.data.error}</p>}
+          </div>
+          <button className="plans-cta" disabled={!selected || isSubmitting || (hasActivePlan && selected === activePlanId)} onClick={handleActivate}>
+            {isSubmitting ? "Redirecting to Shopify…" : hasActivePlan && selected === activePlanId ? "Current plan" : selectedPlan ? hasActivePlan ? `Switch to ${selectedPlan.name} — $${selectedPlan.price.toFixed(2)}/mo` : `Start ${TRIAL_DAYS}-Day Free Trial` : "Select a plan"}
+          </button>
+        </div>
       </div>
-    </>
+    </div>
   );
 }

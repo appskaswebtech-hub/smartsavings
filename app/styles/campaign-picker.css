@@ -1,0 +1,70 @@
+﻿.campaign-picker{position:relative;isolation:isolate;min-height:100vh;background:#f1f7ff;color:#101344;overflow:hidden;font-family:Arial,sans-serif}
+.campaign-picker:before,.campaign-picker:after{content:"";position:absolute;z-index:-1;pointer-events:none;width:1100px;height:650px;border:100px solid #dceaff;border-radius:48%;opacity:.55;transform:rotate(-38deg)}
+.campaign-picker:before{right:-650px;top:-330px;box-shadow:0 0 0 75px #e7f0ff,0 0 0 155px #edf5ff}
+.campaign-picker:after{right:-510px;bottom:-450px;box-shadow:0 0 0 75px #e7f0ff,0 0 0 150px #edf5ff}
+.campaign-picker .Polaris-Page{width:100%;max-width:1300px!important;padding:38px 32px 20px;position:relative}
+.campaign-picker .Polaris-Page-Header{padding-bottom:8px;position:relative;z-index:1}
+.campaign-picker .Polaris-Header-Title{font-size:30px;font-weight:750;letter-spacing:-.8px;line-height:1.2;color:#0c103c}
+.campaign-picker .Polaris-Page-Header .Polaris-Button{color:#268aff}
+.campaign-picker .Polaris-Page>.Polaris-Box{position:relative}
+.campaign-hero{position:absolute;width:310px;height:190px;right:20px;top:0;pointer-events:none;z-index:0;filter:drop-shadow(0 10px 15px #a3bffb44)}
+.campaign-picker .Polaris-Page>.Polaris-BlockStack>.Polaris-Text-root{margin-left:36px;margin-bottom:14px;color:#5a70a9}
+.campaign-picker .Polaris-Tabs__Outer{background:#ffffffbf;border:1px solid #e1ebff;border-radius:13px;box-shadow:0 2px 10px #91b4f015;position:relative;z-index:1}
+.campaign-picker .Polaris-Tabs{padding:7px;gap:12px;flex-wrap:wrap}
+.campaign-picker .Polaris-Tabs__Tab{padding:9px 23px;color:#526899;border-radius:8px;min-height:32px;font-weight:500}
+.campaign-picker .Polaris-Tabs__Tab--active{background:#e0ebff;color:#173a99;font-weight:700}
+.campaign-picker .Polaris-Tabs__Tab:before,.campaign-picker .Polaris-Tabs__Tab:after{display:none}
+.campaign-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:1fr;gap:14px;margin-top:4px}
+.campaign-card{min-width:0;display:flex;border-radius:15px;background:#ffffffd9;border:1px solid #e6eeff;box-shadow:0 3px 14px #7ba4ee0c;overflow:hidden}
+.campaign-card>.Polaris-Box{width:100%;padding:15px!important;background:transparent!important;box-shadow:none!important;border-radius:15px!important}
+.campaign-card>.Polaris-Box>.Polaris-BlockStack{height:100%;gap:12px}
+.campaign-card-inner>.Polaris-BlockStack>.Polaris-Text-root{min-height:36px}
+.campaign-card-inner>.Polaris-BlockStack>.Polaris-InlineStack:nth-last-child(2){flex-wrap:nowrap;min-height:40px}
+.campaign-card .Polaris-Text--headingSm{font-size:17px;line-height:23px;font-weight:700;letter-spacing:-.4px;color:#10133e}
+.campaign-card .Polaris-Text--bodySm{font-size:14px;line-height:18px;color:#52669b}
+.campaign-card .Polaris-BlockStack>.Polaris-InlineStack:last-child{margin-top:auto;padding-top:6px;gap:13px}
+.campaign-card .Polaris-Button{border:1px solid #cad8ff;border-radius:11px;padding:9px 16px;min-height:37px;background:transparent;box-shadow:none;color:#111640;font-size:14px;font-weight:650}
+.campaign-card .Polaris-Button:before{box-shadow:none}
+.campaign-card .Polaris-Button--variantPlain{border-color:transparent;background:#eaf1ff;color:#0066ff}
+.campaign-card .Polaris-Button:hover{background:#dae7ff}
+.campaign-card .Polaris-Button:focus-visible{outline:2px solid #267bff;outline-offset:3px}
+.campaign-card .Polaris-BlockStack>.Polaris-Box:first-child{padding:20px!important;height:280px;min-height:280px!important;flex-shrink:0;box-sizing:border-box;background:linear-gradient(135deg,#edf4ff,#eaf2ff 50%,#f4f8ff)!important;border-radius:13px!important;display:flex;align-items:center;justify-content:center}
+.campaign-card .Polaris-BlockStack>.Polaris-Box:first-child>.Polaris-InlineStack{width:100%}
+.campaign-card .ss-campaigns-create__div-row{min-height:150px!important}
+.campaign-card .ss-campaigns-create__div-row>div{width:100%;max-width:none!important;background:#ffffffd9!important;border:1px solid #dfe9ff!important;box-shadow:0 2px 5px #9bbaf51c;border-radius:11px!important;padding:14px!important;color:#151b49;font-size:12px!important}
+.campaign-card .ss-campaigns-create__div-row>div div,.campaign-card .ss-campaigns-create__div-row>div span{font-size:12px}
+.campaign-card .ss-campaigns-create__span{font-size:18px!important;line-height:20px}
+.campaign-card .ss-campaigns-create__div-20{gap:12px!important;min-height:115px}
+.campaign-card .ss-campaigns-create__div-20-2{background:#e8eeff!important;width:85px!important;height:90px!important}
+.campaign-shirt{width:70px;height:76px;object-fit:contain}
+.campaign-card .ss-campaigns-create__div-20-3{background:#ff3852!important;font-size:12px!important;padding:5px 10px!important;top:-10px!important}
+.campaign-card .ss-campaigns-create__div-100-2{gap:10px!important}
+.campaign-card .ss-campaigns-create__span-80{font-size:19px!important;color:#0c123b}
+.campaign-card .ss-campaigns-create__span-sale{padding:7px!important;background:#00bf91!important}
+.campaign-card .ss-campaigns-create__div-12-2{font-size:20px!important;color:#0d153d}
+.campaign-card .ss-campaigns-create__div-buy-more-save{font-size:12px!important;color:#17204c!important}
+.campaign-card .ss-campaigns-create__div-buy{padding:5px 0!important;border-bottom:1px solid #f0f4fd}
+.campaign-card .ss-campaigns-create__span-2{color:#00b98b!important}
+.campaign-card .ss-campaigns-create__span-buy-3,.campaign-card .ss-campaigns-create__span-save{padding:6px 8px!important}
+.campaign-card .ss-campaigns-create__span-customers-buy-1{padding:7px 10px!important;background:#00c298!important;font-size:12px!important}
+.campaign-card .ss-campaigns-create__div-row-2{margin-top:12px;gap:10px!important}
+.campaign-card .ss-campaigns-create__div-row-3{width:60px!important;height:60px!important;background:#eaf0ff!important;border:0!important}
+.campaign-card .ss-campaigns-create__div-row-3:nth-child(2){outline:3px solid #267aff;outline-offset:2px}
+.campaign-product-image{width:50px;height:50px}
+.campaign-cart-shirt{width:36px;height:36px;border-radius:5px;background:#eaf0ff}
+.campaign-card .ss-campaigns-create__div-your-cart-2{font-weight:700;color:#1c2859!important;margin-bottom:12px!important;font-size:12px!important}
+.campaign-card .ss-campaigns-create__div-apply{background:#2589ff!important}
+.campaign-card .ss-campaigns-create__div-save15shipfree{margin-top:12px}
+.campaign-card .ss-campaigns-create__div-subtotal-2{padding:5px 0;border-top:1px solid #eef2fb}
+.campaign-card .ss-campaigns-create__div-row-5{border:0!important;padding:15px 0!important;align-items:center!important;gap:9px!important}
+.campaign-card .ss-campaigns-create__div-row-6{background:#edf2ff!important;color:#6e89ff;width:32px!important;height:38px!important;font-size:25px!important}
+.campaign-card .ss-campaigns-create__div-shipping-insurance-2{font-size:11px!important}
+.campaign-card .ss-campaigns-create__div-from-damage-loss{font-size:10px!important;margin-top:7px;color:#6374a3}
+@media(max-width:1000px){.campaign-picker .Polaris-Page{padding:28px 24px}.campaign-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.campaign-hero{width:220px;right:0;opacity:.65}.campaign-picker .Polaris-Header-Title{font-size:27px}}
+@media(max-width:600px){.campaign-picker .Polaris-Page{padding:24px 14px}.campaign-grid{grid-template-columns:minmax(0,1fr)}.campaign-hero{display:none}.campaign-picker .Polaris-Header-Title{font-size:24px}.campaign-picker .Polaris-Tabs{gap:3px}.campaign-picker .Polaris-Tabs__Tab{padding:9px 10px;font-size:12px}.campaign-card .Polaris-BlockStack>.Polaris-Box:first-child{min-height:195px!important}}
+.campaign-card .ss-campaigns-create__div-30-2{font-size:21px!important}
+.campaign-card .ss-campaigns-create__div-row-4{padding:7px 5px!important;background:#f4f7ff!important}
+.campaign-card .ss-campaigns-create__span-4{padding:6px 8px!important;background:#00be92!important}
+.campaign-card .ss-campaigns-create__div-your-cart-4{font-size:12px!important;font-weight:700;color:#25315b!important;margin-bottom:16px!important}
+.campaign-card .ss-campaigns-create__div-subtotal-4,.campaign-card .ss-campaigns-create__div-shipping-2{padding:8px 0}
+.campaign-card .ss-campaigns-create__span-shipping-discount-2{font-size:11px!important;padding:7px!important;background:#00be92!important}

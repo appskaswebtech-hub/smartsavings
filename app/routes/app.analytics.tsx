@@ -255,7 +255,7 @@ function StatCard({
     <Card>
       <BlockStack gap="200">
         <InlineStack gap="200" align="start" blockAlign="center">
-          <div
+          <div className="ss-analytics__div-row"
             style={{
               width: 36,
               height: 36,
@@ -266,7 +266,7 @@ function StatCard({
               justifyContent: "center",
             }}
           >
-            <div style={{ color: "#fff", display: "flex" }}>
+            <div className="ss-analytics__div-row-2" style={{ color: "#fff", display: "flex" }}>
               <Icon source={icon} />
             </div>
           </div>
@@ -321,248 +321,249 @@ function AnalyticsModal({
     record.shippingBreakdown ? JSON.parse(record.shippingBreakdown) : null;
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={`Analytics — ${record.campaignName}`}
-      size="large"
-      primaryAction={{ content: "Close", onAction: onClose }}
-    >
-      <Modal.Section>
-        <BlockStack gap="400">
-
-          {/* Campaign Info */}
-          <InlineStack gap="200" wrap>
-            <Badge tone={campaignTypeBadge(record.campaignType)}>
-              {campaignTypeLabel(record.campaignType)}
-            </Badge>
-            <Badge tone={statusBadge(record.campaignStatus)}>
-              {record.campaignStatus.charAt(0).toUpperCase() + record.campaignStatus.slice(1)}
-            </Badge>
-            <Text as="span" variant="bodySm" tone="subdued">
-              {formatDate(record.startDate)} → {formatDate(record.endDate)}
-            </Text>
-          </InlineStack>
-
-          <Divider />
-
-          {/* Performance Metrics */}
-          <Text as="h3" variant="headingMd">Performance Metrics</Text>
-          <Grid>
-            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-              <Card>
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">Total Orders</Text>
-                  <Text as="p" variant="headingMd" fontWeight="bold">{record.totalOrders}</Text>
-                </BlockStack>
-              </Card>
-            </Grid.Cell>
-            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-              <Card>
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">Total Revenue</Text>
-                  <Text as="p" variant="headingMd" fontWeight="bold">{formatCurrency(record.totalRevenue)}</Text>
-                </BlockStack>
-              </Card>
-            </Grid.Cell>
-            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-              <Card>
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">Discount Given</Text>
-                  <Text as="p" variant="headingMd" fontWeight="bold">{formatCurrency(record.totalDiscountGiven)}</Text>
-                </BlockStack>
-              </Card>
-            </Grid.Cell>
-            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-              <Card>
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">Avg Order Value</Text>
-                  <Text as="p" variant="headingMd" fontWeight="bold">{formatCurrency(record.averageOrderValue)}</Text>
-                </BlockStack>
-              </Card>
-            </Grid.Cell>
-          </Grid>
-
-          {/* Discount Details */}
-          <Divider />
-          <Text as="h3" variant="headingMd">Discount Details</Text>
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="400" wrap>
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">Discount Type</Text>
-                  <Text as="p" variant="bodyMd">{discountLabel(record)}</Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">Applies To</Text>
-                  <Text as="p" variant="bodyMd" textDecorationLine="inherit">
-                    {record.appliesTo === "all"
-                      ? "All products"
-                      : record.appliesTo === "specific_products"
-                      ? `${products.length} product(s)`
-                      : `${collections.length} collection(s)`}
-                  </Text>
-                </BlockStack>
-                {record.discountType === "free_shipping" && (
-                  <BlockStack gap="100">
-                    <Text as="p" variant="bodySm" tone="subdued">Free Shipping Value</Text>
-                    <Text as="p" variant="bodyMd">{formatCurrency(record.totalFreeShipping)}</Text>
-                  </BlockStack>
-                )}
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">Items Discounted</Text>
-                  <Text as="p" variant="bodyMd">{record.totalItemsDiscounted}</Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">Conversion Rate</Text>
-                  <Text as="p" variant="bodyMd">{record.conversionRate.toFixed(1)}%</Text>
-                </BlockStack>
-              </InlineStack>
-            </BlockStack>
-          </Card>
-
-          {/* Products Applied To */}
-          {products.length > 0 && (
-            <>
-              <Divider />
-              <Text as="h3" variant="headingMd">Products Applied To</Text>
-              <Card>
-                <BlockStack gap="300">
-                  {products.map((p) => (
-                    <InlineStack key={p.id} gap="300" align="start" blockAlign="center">
-                      <Thumbnail
-                        source={p.image ?? ProductIcon}
-                        alt={p.title}
-                        size="small"
-                      />
-                      <Text as="p" variant="bodyMd">{p.title}</Text>
-                    </InlineStack>
-                  ))}
-                </BlockStack>
-              </Card>
-            </>
-          )}
-
-          {/* Collections */}
-          {collections.length > 0 && (
-            <>
-              <Divider />
-              <Text as="h3" variant="headingMd">Collections Applied To</Text>
-              <Card>
-                <BlockStack gap="200">
-                  {collections.map((c) => (
-                    <Text key={c.id} as="p" variant="bodyMd">• {c.title}</Text>
-                  ))}
-                </BlockStack>
-              </Card>
-            </>
-          )}
-
-          {/* Tier Breakdown */}
-          {tiers.length > 0 && (
-            <>
-              <Divider />
-              <Text as="h3" variant="headingMd">Tier Breakdown</Text>
-              <DataTable
-                columnContentTypes={["text", "text", "numeric"]}
-                headings={["Min Quantity", "Discount", "Times Used"]}
-                rows={tiers.map((t) => [
-                  `${t.qty}+ items`,
-                  record.discountType === "percentage" ? `${t.discount}%` : formatCurrency(t.discount),
-                  t.usageCount.toString(),
-                ])}
-              />
-            </>
-          )}
-
-          {/* Buy X Get Y Breakdown */}
-          {bxgy && (
-            <>
-              <Divider />
-              <Text as="h3" variant="headingMd">Buy X Get Y Breakdown</Text>
-              <Card>
-                <InlineStack gap="400" wrap>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="bodySm" tone="subdued">Buy Quantity</Text>
-                    <Text as="p" variant="bodyMd">{bxgy.buyQty}</Text>
-                  </BlockStack>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="bodySm" tone="subdued">Get Quantity</Text>
-                    <Text as="p" variant="bodyMd">{bxgy.getQty}</Text>
-                  </BlockStack>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="bodySm" tone="subdued">Times Used</Text>
-                    <Text as="p" variant="bodyMd">{bxgy.usageCount}</Text>
-                  </BlockStack>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="bodySm" tone="subdued">Free Items Given</Text>
-                    <Text as="p" variant="bodyMd">{bxgy.freeItemsGiven}</Text>
-                  </BlockStack>
-                </InlineStack>
-              </Card>
-            </>
-          )}
-
-          {/* Shipping Discount Breakdown */}
-          {shipping && (
-            <>
-              <Divider />
-              <Text as="h3" variant="headingMd">Shipping Discount Breakdown</Text>
-              <Card>
-                <InlineStack gap="400" wrap>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="bodySm" tone="subdued">Domestic Orders</Text>
-                    <Text as="p" variant="bodyMd">{shipping.domestic}</Text>
-                  </BlockStack>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="bodySm" tone="subdued">International Orders</Text>
-                    <Text as="p" variant="bodyMd">{shipping.international}</Text>
-                  </BlockStack>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="bodySm" tone="subdued">Total Shipping Waived</Text>
-                    <Text as="p" variant="bodyMd">{formatCurrency(record.totalFreeShipping)}</Text>
-                  </BlockStack>
-                </InlineStack>
-              </Card>
-            </>
-          )}
-
-          {/* Top Products by Usage */}
-          {topProducts.length > 0 && (
-            <>
-              <Divider />
-              <Text as="h3" variant="headingMd">Top Products by Discount Usage</Text>
-              <DataTable
-                columnContentTypes={["text", "numeric", "numeric"]}
-                headings={["Product", "Orders", "Discount Total"]}
-                rows={topProducts.map((p) => [
-                  p.title,
-                  p.ordersCount.toString(),
-                  formatCurrency(p.discountTotal),
-                ])}
-              />
-            </>
-          )}
-
-          {/* Metadata */}
-          <Divider />
-          <InlineStack gap="400" wrap>
-            <Text as="p" variant="bodySm" tone="subdued">
-              First tracked: {formatDate(record.createdAt)}
-            </Text>
-            <Text as="p" variant="bodySm" tone="subdued">
-              Last updated: {formatDate(record.updatedAt)}
-            </Text>
-            {record.shopifyDiscountId && (
-              <Text as="p" variant="bodySm" tone="subdued">
-                Shopify ID: {record.shopifyDiscountId}
+    <>
+      <style>{customizationStyles}</style>
+      <Modal
+        open={open}
+        onClose={onClose}
+        title={`Analytics — ${record.campaignName}`}
+        size="large"
+        primaryAction={{ content: "Close", onAction: onClose }}
+      >
+        <Modal.Section>
+          <BlockStack gap="400">
+            {/* Campaign Info */}
+            <InlineStack gap="200" wrap>
+              <Badge tone={campaignTypeBadge(record.campaignType)}>
+                {campaignTypeLabel(record.campaignType)}
+              </Badge>
+              <Badge tone={statusBadge(record.campaignStatus)}>
+                {record.campaignStatus.charAt(0).toUpperCase() + record.campaignStatus.slice(1)}
+              </Badge>
+              <Text as="span" variant="bodySm" tone="subdued">
+                {formatDate(record.startDate)} → {formatDate(record.endDate)}
               </Text>
-            )}
-          </InlineStack>
+            </InlineStack>
 
-        </BlockStack>
-      </Modal.Section>
-    </Modal>
+            <Divider />
+
+            {/* Performance Metrics */}
+            <Text as="h3" variant="headingMd">Performance Metrics</Text>
+            <Grid>
+              <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                <Card>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">Total Orders</Text>
+                    <Text as="p" variant="headingMd" fontWeight="bold">{record.totalOrders}</Text>
+                  </BlockStack>
+                </Card>
+              </Grid.Cell>
+              <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                <Card>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">Total Revenue</Text>
+                    <Text as="p" variant="headingMd" fontWeight="bold">{formatCurrency(record.totalRevenue)}</Text>
+                  </BlockStack>
+                </Card>
+              </Grid.Cell>
+              <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                <Card>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">Discount Given</Text>
+                    <Text as="p" variant="headingMd" fontWeight="bold">{formatCurrency(record.totalDiscountGiven)}</Text>
+                  </BlockStack>
+                </Card>
+              </Grid.Cell>
+              <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                <Card>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">Avg Order Value</Text>
+                    <Text as="p" variant="headingMd" fontWeight="bold">{formatCurrency(record.averageOrderValue)}</Text>
+                  </BlockStack>
+                </Card>
+              </Grid.Cell>
+            </Grid>
+
+            {/* Discount Details */}
+            <Divider />
+            <Text as="h3" variant="headingMd">Discount Details</Text>
+            <Card>
+              <BlockStack gap="200">
+                <InlineStack gap="400" wrap>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">Discount Type</Text>
+                    <Text as="p" variant="bodyMd">{discountLabel(record)}</Text>
+                  </BlockStack>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">Applies To</Text>
+                    <Text as="p" variant="bodyMd" textDecorationLine="none">
+                      {record.appliesTo === "all"
+                        ? "All products"
+                        : record.appliesTo === "specific_products"
+                          ? `${products.length} product(s)`
+                          : `${collections.length} collection(s)`}
+                    </Text>
+                  </BlockStack>
+                  {record.discountType === "free_shipping" && (
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm" tone="subdued">Free Shipping Value</Text>
+                      <Text as="p" variant="bodyMd">{formatCurrency(record.totalFreeShipping)}</Text>
+                    </BlockStack>
+                  )}
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">Items Discounted</Text>
+                    <Text as="p" variant="bodyMd">{record.totalItemsDiscounted}</Text>
+                  </BlockStack>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">Conversion Rate</Text>
+                    <Text as="p" variant="bodyMd">{record.conversionRate.toFixed(1)}%</Text>
+                  </BlockStack>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+
+            {/* Products Applied To */}
+            {products.length > 0 && (
+              <>
+                <Divider />
+                <Text as="h3" variant="headingMd">Products Applied To</Text>
+                <Card>
+                  <BlockStack gap="300">
+                    {products.map((p) => (
+                      <InlineStack key={p.id} gap="300" align="start" blockAlign="center">
+                        <Thumbnail
+                          source={p.image ?? ProductIcon}
+                          alt={p.title}
+                          size="small"
+                        />
+                        <Text as="p" variant="bodyMd">{p.title}</Text>
+                      </InlineStack>
+                    ))}
+                  </BlockStack>
+                </Card>
+              </>
+            )}
+
+            {/* Collections */}
+            {collections.length > 0 && (
+              <>
+                <Divider />
+                <Text as="h3" variant="headingMd">Collections Applied To</Text>
+                <Card>
+                  <BlockStack gap="200">
+                    {collections.map((c) => (
+                      <Text key={c.id} as="p" variant="bodyMd">• {c.title}</Text>
+                    ))}
+                  </BlockStack>
+                </Card>
+              </>
+            )}
+
+            {/* Tier Breakdown */}
+            {tiers.length > 0 && (
+              <>
+                <Divider />
+                <Text as="h3" variant="headingMd">Tier Breakdown</Text>
+                <DataTable
+                  columnContentTypes={["text", "text", "numeric"]}
+                  headings={["Min Quantity", "Discount", "Times Used"]}
+                  rows={tiers.map((t) => [
+                    `${t.qty}+ items`,
+                    record.discountType === "percentage" ? `${t.discount}%` : formatCurrency(t.discount),
+                    t.usageCount.toString(),
+                  ])}
+                />
+              </>
+            )}
+
+            {/* Buy X Get Y Breakdown */}
+            {bxgy && (
+              <>
+                <Divider />
+                <Text as="h3" variant="headingMd">Buy X Get Y Breakdown</Text>
+                <Card>
+                  <InlineStack gap="400" wrap>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm" tone="subdued">Buy Quantity</Text>
+                      <Text as="p" variant="bodyMd">{bxgy.buyQty}</Text>
+                    </BlockStack>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm" tone="subdued">Get Quantity</Text>
+                      <Text as="p" variant="bodyMd">{bxgy.getQty}</Text>
+                    </BlockStack>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm" tone="subdued">Times Used</Text>
+                      <Text as="p" variant="bodyMd">{bxgy.usageCount}</Text>
+                    </BlockStack>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm" tone="subdued">Free Items Given</Text>
+                      <Text as="p" variant="bodyMd">{bxgy.freeItemsGiven}</Text>
+                    </BlockStack>
+                  </InlineStack>
+                </Card>
+              </>
+            )}
+
+            {/* Shipping Discount Breakdown */}
+            {shipping && (
+              <>
+                <Divider />
+                <Text as="h3" variant="headingMd">Shipping Discount Breakdown</Text>
+                <Card>
+                  <InlineStack gap="400" wrap>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm" tone="subdued">Domestic Orders</Text>
+                      <Text as="p" variant="bodyMd">{shipping.domestic}</Text>
+                    </BlockStack>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm" tone="subdued">International Orders</Text>
+                      <Text as="p" variant="bodyMd">{shipping.international}</Text>
+                    </BlockStack>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm" tone="subdued">Total Shipping Waived</Text>
+                      <Text as="p" variant="bodyMd">{formatCurrency(record.totalFreeShipping)}</Text>
+                    </BlockStack>
+                  </InlineStack>
+                </Card>
+              </>
+            )}
+
+            {/* Top Products by Usage */}
+            {topProducts.length > 0 && (
+              <>
+                <Divider />
+                <Text as="h3" variant="headingMd">Top Products by Discount Usage</Text>
+                <DataTable
+                  columnContentTypes={["text", "numeric", "numeric"]}
+                  headings={["Product", "Orders", "Discount Total"]}
+                  rows={topProducts.map((p) => [
+                    p.title,
+                    p.ordersCount.toString(),
+                    formatCurrency(p.discountTotal),
+                  ])}
+                />
+              </>
+            )}
+
+            {/* Metadata */}
+            <Divider />
+            <InlineStack gap="400" wrap>
+              <Text as="p" variant="bodySm" tone="subdued">
+                First tracked: {formatDate(record.createdAt)}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Last updated: {formatDate(record.updatedAt)}
+              </Text>
+              {record.shopifyDiscountId && (
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Shopify ID: {record.shopifyDiscountId}
+                </Text>
+              )}
+            </InlineStack>
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+    </>
   );
 }
 
@@ -606,7 +607,423 @@ export default function Analytics() {
   });
 
   return (
-    <Page title="Analytics" subtitle="Campaign performance — data is retained even after campaigns are deleted.">
+    <>
+      <style>{`
+    body {
+    background: radial-gradient(ellipse at 76% 3%, rgba(151, 190, 255, .28) 0, rgba(151, 190, 255, 0) 30%), radial-gradient(ellipse at 87% 100%, rgba(173, 201, 255, .24) 0, rgba(173, 201, 255, 0) 28%), linear-gradient(135deg, #f4f8ff 0%, #edf5ff 52%, #f8fbff 100%);
+}
+        .Polaris-Page {
+          max-width: 1300px !important;
+          margin: 0 auto;
+        }
+/* Page canvas */
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) {
+  position: relative;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 28px 30px 34px;
+  isolation: isolate;
+  color: #101b3c;
+  // background:
+  //   radial-gradient(ellipse at 76% 3%, rgba(151, 190, 255, .28) 0, rgba(151, 190, 255, 0) 30%),
+  //   radial-gradient(ellipse at 87% 100%, rgba(173, 201, 255, .24) 0, rgba(173, 201, 255, 0) 28%),
+  //   linear-gradient(135deg, #f4f8ff 0%, #edf5ff 52%, #f8fbff 100%);
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue)::before,
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue)::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .7);
+  transform: rotate(-28deg);
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue)::before {
+  width: 470px;
+  height: 250px;
+  top: -120px;
+  right: -70px;
+  box-shadow: 0 0 0 35px rgba(255,255,255,.12), 0 0 0 75px rgba(255,255,255,.1), 0 0 0 115px rgba(255,255,255,.08);
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue)::after {
+  width: 390px;
+  height: 180px;
+  right: -90px;
+  bottom: -105px;
+  box-shadow: 0 0 0 32px rgba(255,255,255,.22), 0 0 0 68px rgba(255,255,255,.15);
+}
+
+/* Header */
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) > .Polaris-Box:first-child {
+  padding: 22px 18px 24px !important;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Page-Header__Row {
+  align-items: center;
+}
+  span.Polaris-Text--root.Polaris-Text--bodySm.Polaris-Text--medium {
+    font-size: 14px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Header-Title__TitleWithSubtitle {
+  color: #101a3b;
+  font-size: clamp(28px, 3vw, 30px) !important;
+  font-weight: 800;
+  letter-spacing: -1.2px;
+  line-height: 1.15;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Header-Title__SubTitle {
+  margin-top: 8px;
+  color: #52658f;
+  font-size: 15px;
+}
+
+/* Shopify API notice banner */
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Banner--withinPage {
+  margin: 0 0 16px;
+  overflow: hidden;
+  border: 1px solid #d7e7ff;
+  border-radius: 16px;
+  background: linear-gradient(110deg, rgba(224, 238, 255, .96), rgba(244, 249, 255, .98));
+  box-shadow: 0 3px 10px rgba(45, 94, 170, .07), inset 0 0 0 3px rgba(255,255,255,.7);
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Banner--withinPage > .Polaris-Box > .Polaris-BlockStack > .Polaris-Box:first-child {
+  background: transparent !important;
+  color: #0864f7 !important;
+  padding: 18px 22px 2px !important;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Banner--withinPage h2 {
+  color: #075ef5;
+  font-size: 15px;
+  font-weight: 700;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .ss-analytics__p-order-counts-revenue {
+  margin: 0;
+  color: #6880ad;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Banner--withinPage > .Polaris-Box > .Polaris-BlockStack > .Polaris-Box:last-child {
+  padding: 4px 22px 20px !important;
+}
+
+/* KPI cards */
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 18px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell {
+    min-width: 0;
+    padding: 0 !important;
+    grid-column-end: span 1;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell > .Polaris-ShadowBevel,
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell > .Polaris-ShadowBevel > .Polaris-Box {
+  height: 100%;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell > .Polaris-ShadowBevel {
+  border: 1px solid #dce9ff;
+  border-radius: 16px;
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 3px 10px rgba(54, 96, 157, .055);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell > .Polaris-ShadowBevel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(54, 96, 157, .1);
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell .Polaris-ShadowBevel .Polaris-Box {
+  padding: 18px 19px !important;
+  background: transparent !important;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell .Polaris-BlockStack {
+  gap: 7px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell .Polaris-InlineStack {
+  gap: 12px;
+  align-items: center;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell .ss-analytics__div-row {
+  width: 46px !important;
+  height: 46px !important;
+  flex: 0 0 46px;
+  border-radius: 12px !important;
+  box-shadow: 0 5px 12px rgba(35, 93, 190, .12);
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell .ss-analytics__div-row .Polaris-Icon,
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell .ss-analytics__div-row svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell .Polaris-Text--bodySm {
+  color: #40527c;
+  font-size: 13px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell .Polaris-Text--headingLg {
+  color: #101a3c;
+  font-size: 27px;
+  line-height: 1.15;
+  letter-spacing: -.7px;
+  font-weight: 800;
+}
+
+/* Campaign analytics panel */
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) > .Polaris-ShadowBevel {
+  overflow: hidden;
+  border: 1px solid #dce8ff;
+  border-radius: 18px;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 4px 12px rgba(54, 96, 157, .055);
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) > .Polaris-ShadowBevel > .Polaris-Box {
+  padding: 22px 20px 18px !important;
+  background: transparent !important;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) > .Polaris-ShadowBevel h2 {
+  color: #111a35;
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 750;
+  letter-spacing: -.35px;
+}
+
+/* Search field and Add filter */
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Filters__Container {
+  margin: 0 0 16px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Filters__Container > .Polaris-Box {
+  padding: 0 !important;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Filters__SearchField {
+  flex: 1 1 400px;
+  min-width: 180px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-TextField__Input {
+  min-height: 42px;
+  color: #24365f;
+
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-TextField__Input::placeholder {
+  color: #8b9cbd;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-TextField__Backdrop {
+  border: 1px solid #d4e0f7;
+  border-radius: 10px;
+  box-shadow: 0 2px 5px rgba(43, 76, 132, .04);
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Filters__AddFilter {
+  min-height: 42px;
+  padding: 0 14px;
+  color: #334a78;
+  border: 1px solid #d4e0f7;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 5px rgba(43, 76, 132, .04);
+  font-size: 13px;
+  transition: background .18s ease, border-color .18s ease;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Filters__AddFilter:hover {
+  background: #f2f7ff;
+  border-color: #a8c7ff;
+}
+
+/* Table */
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-DataTable__Navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 8px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-DataTable {
+  overflow: hidden;
+  border-radius: 12px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-DataTable__ScrollContainer {
+  overflow-x: auto;
+  border-radius: 12px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-DataTable__Table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #3d4f78;
+  font-size: 13px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-DataTable__Cell {
+  padding: 14px 12px;
+  vertical-align: middle;
+  border-bottom: 1px solid #e6edf8;
+  background: transparent;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) thead .Polaris-DataTable__Cell--header {
+  padding-top: 15px;
+  padding-bottom: 15px;
+  color: #27395f;
+  background: #f2f6fd;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) thead .Polaris-DataTable__Cell--header:first-child {
+  border-radius: 10px 0 0 10px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) thead .Polaris-DataTable__Cell--header:last-child {
+  border-radius: 0 10px 10px 0;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) tbody tr {
+  transition: background .16s ease;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) tbody tr:hover {
+  background: #f8fbff;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) tbody tr:last-child .Polaris-DataTable__Cell {
+  border-bottom: 0;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-DataTable__Cell--firstColumn p:first-child {
+  color: #075fff;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-DataTable__Cell--firstColumn p:last-child {
+  margin-top: 4px;
+  color: #8192b5;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Type and status badges */
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 29px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Badge--toneInfo {
+  color: #075fe9;
+  background: #e2efff;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Badge--toneSuccess {
+  color: #008e68;
+  background: #d6faed;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Badge--toneWarning,
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Badge--toneAttention {
+  color: #6e24d9;
+  background: #f0e4ff;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Badge--toneNew {
+  color: #9b4b00;
+  background: #fff0df;
+}
+
+/* View / delete action buttons */
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-DataTable__Cell .Polaris-InlineStack {
+  flex-wrap: nowrap;
+  gap: 7px;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Button--iconOnly {
+  min-width: 39px;
+  min-height: 39px;
+  padding: 8px;
+  border: 1px solid #d9e4f8;
+  border-radius: 10px;
+  color: #334a78;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(34, 65, 119, .06);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Button--iconOnly:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(34, 65, 119, .12);
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Button--toneCritical,
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) button[aria-label*="Delete"] {
+  color: #f1264b;
+  border-color: #ffdce3;
+  background: #fff5f7;
+}
+
+/* Table scroll controls */
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-DataTable__Navigation .Polaris-Button {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-DataTable__Navigation .Polaris-Button svg {
+  fill: #304a80;
+}
+
+// /* Keyboard accessibility */
+// .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) button:focus-visible,
+// .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) input:focus-visible {
+//   outline: 3px solid rgba(35, 111, 255, .28);
+//   outline-offset: 2px;
+// }
+
+/* Tablet and mobile */
+@media (max-width: 1000px) {
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) {
+    padding: 18px 16px 24px;
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) > .Polaris-ShadowBevel > .Polaris-Box {
+    padding: 18px 14px !important;
+  }
+}
+@media (max-width: 560px) {
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) {
+    padding: 10px;
+    border-radius: 12px;
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) > .Polaris-Box:first-child {
+    padding: 16px 6px 18px !important;
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Header-Title__TitleWithSubtitle {
+    font-size: 29px;
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Header-Title__SubTitle {
+    font-size: 13px;
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid {
+    gap: 10px;
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell .Polaris-ShadowBevel .Polaris-Box {
+    padding: 13px !important;
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell .ss-analytics__div-row {
+    width: 38px !important;
+    height: 38px !important;
+    flex-basis: 38px;
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Grid-Cell .Polaris-Text--headingLg {
+    font-size: 22px;
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Banner--withinPage > .Polaris-Box > .Polaris-BlockStack > .Polaris-Box:first-child {
+    padding: 14px 14px 2px !important;
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) .Polaris-Banner--withinPage > .Polaris-Box > .Polaris-BlockStack > .Polaris-Box:last-child {
+    padding: 4px 14px 15px !important;
+  }
+  .Polaris-Page:has(.ss-analytics__p-order-counts-revenue) > .Polaris-ShadowBevel h2 {
+    font-size: 18px;
+  }
+}
+
+      `}</style>
+      <Page title="Analytics" subtitle="Campaign performance — data is retained even after campaigns are deleted.">
       <BlockStack gap="400">
 
         {/* Banner */}
@@ -616,7 +1033,7 @@ export default function Analytics() {
             tone="info"
             onDismiss={() => setBannerDismissed(true)}
           >
-            <p>
+            <p className="ss-analytics__p-order-counts-revenue">
               Order counts, revenue, and discount totals are populated when you wire up the Shopify Orders API.
               Campaign structure data (products, tiers, settings) is tracked automatically.
             </p>
@@ -731,7 +1148,7 @@ export default function Analytics() {
                 heading="No analytics records found"
                 image=""
               >
-                <p>Create campaigns to start tracking analytics. Records are kept even after campaigns are deleted.</p>
+                <p className="ss-analytics__p-create-campaigns-to">Create campaigns to start tracking analytics. Records are kept even after campaigns are deleted.</p>
               </EmptyState>
             ) : (
               <DataTable
@@ -835,6 +1252,13 @@ export default function Analytics() {
         />
 
       </BlockStack>
-    </Page>
+      </Page>
+    </>
   );
+
 }
+const customizationStyles = `
+
+
+
+`;

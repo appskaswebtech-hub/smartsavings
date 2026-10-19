@@ -319,3 +319,102 @@ export function protectionDiscountColumns(config: ProtectionConfig) {
     ? { discountType: "fixed_amount", discountValue: config.fixedAmount }
     : { discountType: "percentage", discountValue: config.percentage };
 }
+
+/**
+ * How the protection card looks, set once per shop in Customization ›
+ * Shipping protection (a WidgetCustomization row, widgetType
+ * "shipping_protection") and published in the shop metafield beside the
+ * campaigns.
+ *
+ * Look only — the wording stays on each campaign, so campaigns can say
+ * different things while sharing one look. Every field is optional and a blank
+ * one is dropped by normalizeProtectionStyle, so an untouched field leaves the
+ * theme block's own setting in place.
+ */
+export interface ProtectionStyle {
+  /** Where the card may appear at all (it still has to be placed in the theme). */
+  showOnProduct?: boolean;
+  showOnCart?: boolean;
+
+  cardBg?: string;
+  borderColor?: string;
+  borderRadius?: number;
+  accentColor?: string;
+  iconSize?: number;
+
+  headingColor?: string;
+  headingSize?: number;
+  titleColor?: string;
+  titleSize?: number;
+  bodyColor?: string;
+  bodySize?: number;
+
+  /** Size & spacing, the same fields the other widgets' LayoutControls write. */
+  width?: number;
+  paddingTop?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
+  paddingRight?: number;
+}
+
+/** What the admin form starts from — matches the theme block's own defaults. */
+export const DEFAULT_PROTECTION_STYLE: ProtectionStyle = {
+  showOnProduct: true,
+  showOnCart: true,
+  cardBg: "#FFFFFF",
+  borderColor: "#E3E3E3",
+  borderRadius: 10,
+  accentColor: "#A0485E",
+  iconSize: 48,
+  headingColor: "#000000",
+  headingSize: 15,
+  titleColor: "#1A1A1A",
+  titleSize: 14,
+  bodyColor: "#1A1A1A",
+  bodySize: 12,
+};
+
+const STYLE_NUMBERS = [
+  "borderRadius", "iconSize", "headingSize", "titleSize", "bodySize",
+  "width", "paddingTop", "paddingBottom", "paddingLeft", "paddingRight",
+] as const;
+const STYLE_COLORS = [
+  "cardBg", "borderColor", "accentColor", "headingColor", "titleColor", "bodyColor",
+] as const;
+
+/**
+ * Keeps only what the merchant actually set. Blank strings and NaN are
+ * dropped — the widget skips missing fields, so the theme block's setting
+ * survives — while 0 is kept, since "no radius" and "no padding" are real
+ * choices.
+ */
+export function normalizeProtectionStyle(raw: unknown): ProtectionStyle {
+  const input = (raw ?? {}) as Record<string, unknown>;
+  const style: ProtectionStyle = {};
+
+  for (const key of STYLE_COLORS) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim() !== "") style[key] = value.trim();
+  }
+  for (const key of STYLE_NUMBERS) {
+    const value = typeof input[key] === "string" ? (input[key] as string).trim() : input[key];
+    if (value === "" || value === null || value === undefined) continue;
+    const num = Number(value);
+    if (Number.isFinite(num)) style[key] = num;
+  }
+  // Absent means "show" — only an explicit false hides the card.
+  if (input.showOnProduct === false) style.showOnProduct = false;
+  if (input.showOnCart === false) style.showOnCart = false;
+
+  return style;
+}
+
+/** The saved row, or the defaults for a shop that hasn't customized it yet. */
+export function parseProtectionStyle(json: string | null | undefined): ProtectionStyle {
+  if (!json) return { ...DEFAULT_PROTECTION_STYLE };
+  try {
+    return { ...DEFAULT_PROTECTION_STYLE, ...normalizeProtectionStyle(JSON.parse(json)) };
+  } catch {
+    return { ...DEFAULT_PROTECTION_STYLE };
+  }
+}

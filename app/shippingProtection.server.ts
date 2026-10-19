@@ -4,6 +4,7 @@ import {
   SHIPPING_PROTECTION,
   isProtectionPublishable,
   parseProtectionConfig,
+  parseProtectionStyle,
   protectionConflict,
   type ProtectionConfig,
 } from "./lib/shippingProtection";
@@ -178,6 +179,13 @@ export async function syncShippingProtection(admin: AdminApiContext, shop: strin
     const transform = await ensureCartTransform(admin);
     if (!transform.id) return [transform.error || "Couldn't set up the shipping protection pricing function."];
 
+    // Look only, shared by every campaign — Customization > Shipping protection.
+    // The widget applies whatever is set here over the theme block's settings.
+    const styleRow = await db.widgetCustomization.findUnique({
+      where: { shop_widgetType: { shop, widgetType: SHIPPING_PROTECTION } },
+    });
+    const style = parseProtectionStyle(styleRow?.config);
+
     const productIdsOf = (config: ProtectionConfig) =>
       config.appliesTo === "all" ? [] : config.products.map((p) => p.productId);
 
@@ -202,6 +210,7 @@ export async function syncShippingProtection(admin: AdminApiContext, shop: strin
             startsAt: campaign.startDate ? campaign.startDate.toISOString() : null,
             endsAt: campaign.endDate ? campaign.endDate.toISOString() : null,
           })),
+          style,
         },
       },
       {

@@ -2,7 +2,7 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useNavigate, useFetcher, useRevalidator } from "@remix-run/react";
 import {
-  Page, Card, Text, BlockStack, InlineStack, Badge, Box, Divider,
+  Page, Text, BlockStack, InlineStack, Badge, Box, Divider,
   InlineGrid, Banner, Thumbnail,
 } from "@shopify/polaris";
 import { useEffect } from "react";
@@ -14,6 +14,7 @@ import {
   parseProtectionConfig,
   protectionNotLiveReason,
 } from "../lib/shippingProtection";
+import { PageHeader, SectionCard, StatusPill } from "../components/Theme";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -300,18 +301,8 @@ export default function CampaignDetail() {
     deleteFetcher.submit(fd, { method: "post", action: "/app/campaigns" });
   };
 
-  const getStatusBadge = (s: string) => {
-    const map: Record<string, any> = {
-      active:    <Badge tone="success">Active</Badge>,
-      scheduled: <Badge tone="info">Scheduled</Badge>,
-      expired:   <Badge>Expired</Badge>,
-      paused:    <Badge tone="warning">Paused</Badge>,
-      ACTIVE:    <Badge tone="success">Active</Badge>,
-      EXPIRED:   <Badge>Expired</Badge>,
-      SCHEDULED: <Badge tone="info">Scheduled</Badge>,
-    };
-    return map[s] || <Badge>{s}</Badge>;
-  };
+  // Shopify reports ACTIVE/EXPIRED/SCHEDULED; the app stores lowercase.
+  const getStatusBadge = (s: string) => <StatusPill status={(s || "").toLowerCase()} />;
 
   const isProtection = campaign.type === SHIPPING_PROTECTION;
   const protectionConfig = isProtection
@@ -332,37 +323,40 @@ export default function CampaignDetail() {
   const isDeleting = deleteFetcher.state !== "idle";
 
   return (
-    <Page
-      backAction={{ content: "Campaigns", url: "/app/campaigns" }}
-      title={campaign.name}
-      titleMetadata={getStatusBadge(campaign.status)}
-      primaryAction={{
-        content: isToggling
-          ? (campaign.status === "active" ? "Pausing…" : "Activating…")
-          : (campaign.status === "active" ? "Pause" : "Activate"),
-        loading: isToggling,
-        onAction: handleToggle,
-      }}
-      secondaryActions={[
-        {
-          content: "Edit",
-          onAction: () => navigate(`/app/campaigns/edit/${campaign.id}`),
-        },
-        {
-          content: isDeleting ? "Deleting…" : "Delete",
-          destructive: true,
-          loading: isDeleting,
-          onAction: handleDelete,
-        }
-      ]}
-    >
+    <Page fullWidth>
+      <div className="ss-page">
+      <PageHeader
+        backTo="/app/campaigns"
+        backLabel="Campaigns"
+        title={campaign.name}
+        badge={getStatusBadge(campaign.status)}
+        primaryAction={{
+          content: isToggling
+            ? (campaign.status === "active" ? "Pausing…" : "Activating…")
+            : (campaign.status === "active" ? "Pause" : "Activate"),
+          loading: isToggling,
+          onAction: handleToggle,
+        }}
+        secondaryActions={[
+          {
+            content: "Edit",
+            icon: "edit",
+            onAction: () => navigate(`/app/campaigns/edit/${campaign.id}`),
+          },
+          {
+            content: isDeleting ? "Deleting…" : "Delete",
+            destructive: true,
+            loading: isDeleting,
+            onAction: handleDelete,
+          }
+        ]}
+      />
       <BlockStack gap="400">
 
         {/* ── Overview ── */}
-        <Card>
+        <SectionCard title="Campaign overview" icon="info" tone="blue">
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">Campaign Overview</Text>
-            <InlineGrid columns={2} gap="400">
+            <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
               <BlockStack gap="200">
                 <Text as="span" variant="bodySm" tone="subdued">Campaign Name</Text>
                 <Text as="span" variant="bodyMd" fontWeight="bold">{campaign.name}</Text>
@@ -403,13 +397,12 @@ export default function CampaignDetail() {
               </BlockStack>
             </InlineGrid>
           </BlockStack>
-        </Card>
+        </SectionCard>
 
         {/* ── Schedule ── */}
-        <Card>
+        <SectionCard title="Schedule" icon="calendar" tone="mint">
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">Schedule</Text>
-            <InlineGrid columns={2} gap="400">
+            <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
               <BlockStack gap="200">
                 <Text as="span" variant="bodySm" tone="subdued">Start Date</Text>
                 <Text as="span" variant="bodyMd">{campaign.startDate || "Immediately"}</Text>
@@ -428,22 +421,19 @@ export default function CampaignDetail() {
               </BlockStack>
             </InlineGrid>
           </BlockStack>
-        </Card>
+        </SectionCard>
 
         {/* ── Tiers ── */}
         {tiers.length > 0 && (
-          <Card>
+          <SectionCard title={campaign.type === "cart_goal" ? "Spending tiers" : "Quantity tiers"} icon="layers" tone="violet">
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                {campaign.type === "cart_goal" ? "Spending Tiers" : "Quantity Tiers"}
-              </Text>
-              <div style={{ border: "1px solid #e0e0e0", borderRadius: "8px", overflow: "hidden" }}>
-                <div style={{ display: "flex", padding: "10px 16px", fontWeight: "bold", fontSize: "13px", background: "#f5f5f5", borderBottom: "1px solid #e0e0e0" }}>
+              <div className="ss-table">
+                <div className="ss-table__head" style={{ display: "flex", padding: "10px 16px", fontSize: "13px" }}>
                   <span style={{ flex: 1 }}>{campaign.type === "cart_goal" ? "Minimum Spend" : "Minimum Quantity"}</span>
                   <span style={{ flex: 1 }}>Discount</span>
                 </div>
                 {tiers.map((tier: any, idx: number) => (
-                  <div key={idx} style={{ display: "flex", padding: "10px 16px", fontSize: "13px", borderBottom: idx < tiers.length - 1 ? "1px solid #f0f0f0" : "none" }}>
+                  <div key={idx} className="ss-table__row" style={{ display: "flex", padding: "10px 16px", fontSize: "13px" }}>
                     <span style={{ flex: 1 }}>
                       {campaign.type === "cart_goal" ? `$${tier.amount || tier.spend}+` : `${tier.quantity || tier.qty}+ items`}
                     </span>
@@ -454,14 +444,13 @@ export default function CampaignDetail() {
                 ))}
               </div>
             </BlockStack>
-          </Card>
+          </SectionCard>
         )}
 
         {/* ── Shipping protection: fee product, protected products, widget text ── */}
         {isProtection && (
-          <Card>
+          <SectionCard title="Shipping protection" icon="shield" tone="sky">
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Shipping protection</Text>
               <Divider />
               {protectionNotLiveReason(protectionConfig) && (
                 <Banner tone="warning">
@@ -487,7 +476,7 @@ export default function CampaignDetail() {
                 {protectionConfig?.appliesTo === "all" ? (
                   <Text as="span" variant="bodyMd">All products</Text>
                 ) : (
-                  <InlineGrid columns={2} gap="300">
+                  <InlineGrid columns={{ xs: 1, sm: 2 }} gap="300">
                     {(protectionConfig?.products ?? []).map((p) => (
                       <InlineStack key={p.productId} gap="200" blockAlign="center" wrap={false}>
                         {p.imageUrl
@@ -499,7 +488,7 @@ export default function CampaignDetail() {
                   </InlineGrid>
                 )}
               </BlockStack>
-              <InlineGrid columns={2} gap="400">
+              <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
                 <BlockStack gap="100">
                   <Text as="span" variant="bodySm" tone="subdued">Heading</Text>
                   <Text as="span" variant="bodyMd">{protectionConfig?.heading || "—"}</Text>
@@ -518,18 +507,21 @@ export default function CampaignDetail() {
                 </BlockStack>
               </InlineGrid>
             </BlockStack>
-          </Card>
+          </SectionCard>
         )}
 
         {/* ── Products / Variants / Collections ── */}
         {!isProtection && (
-        <Card>
+        <SectionCard
+          title={
+            campaign.appliesTo === "specific_products" ? "Selected products & variants"
+              : campaign.appliesTo === "specific_collections" ? "Selected collections"
+              : "Products"
+          }
+          icon="box"
+          tone="amber"
+        >
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">
-              {campaign.appliesTo === "specific_products" ? "Selected Products & Variants"
-                : campaign.appliesTo === "specific_collections" ? "Selected Collections"
-                : "Products"}
-            </Text>
             <Divider />
 
             {(campaign.appliesTo === "all" || !campaign.appliesTo) && (
@@ -568,7 +560,7 @@ export default function CampaignDetail() {
                         (product.variants || []).length > 0 ? (
                           <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "12px" }}>
                             <Text as="p" variant="bodySm" tone="subdued" fontWeight="semibold">All variants included:</Text>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "8px" }}>
+                            <div className="ss-grid-2" style={{ marginTop: "8px" }}>
                               {(product.variants || []).slice(0, 10).map((v: any) => (
                                 <div key={v.id} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
                                   <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#16a34a", flexShrink: 0 }} />
@@ -590,7 +582,7 @@ export default function CampaignDetail() {
                         Array.isArray(product.selectedVariants) && product.selectedVariants.length > 0 ? (
                           <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "12px" }}>
                             <Text as="p" variant="bodySm" tone="subdued" fontWeight="semibold">Selected variants only:</Text>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "8px" }}>
+                            <div className="ss-grid-2" style={{ marginTop: "8px" }}>
                               {(product.selectedVariants as any[]).map((v: any) => (
                                 <div key={v.id} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
                                   <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#3b82f6", flexShrink: 0 }} />
@@ -623,14 +615,13 @@ export default function CampaignDetail() {
               </BlockStack>
             )}
           </BlockStack>
-        </Card>
+        </SectionCard>
         )}
 
         {/* ── Discount Popup summary ── */}
         {campaign.type === "advanced_discount_code" && (
-          <Card>
+          <SectionCard title="Discount popup" icon="mail" tone="rose">
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Discount Popup</Text>
               <InlineStack gap="400" wrap>
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm" tone="subdued">Status</Text>
@@ -658,29 +649,30 @@ export default function CampaignDetail() {
                 </BlockStack>
               </InlineStack>
             </BlockStack>
-          </Card>
+          </SectionCard>
         )}
 
         {/* ── Popup email signups ── */}
         {campaign.type === "advanced_discount_code" && (campaign as any).popupEnabled && (
-          <Card>
+          <SectionCard
+            title="Popup email signups"
+            icon="users"
+            tone="rose"
+            actions={<Badge tone="info">{`${emailSignups.length} signups`}</Badge>}
+          >
             <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">Popup email signups</Text>
-                <Badge tone="info">{emailSignups.length} signups</Badge>
-              </InlineStack>
               {emailSignups.length === 0 ? (
                 <Banner tone="info">
                   <p>No signups yet. When shoppers submit their email in the storefront popup, they'll appear here.</p>
                 </Banner>
               ) : (
-                <div style={{ border: "1px solid #e0e0e0", borderRadius: "8px", overflow: "hidden" }}>
-                  <div style={{ display: "flex", padding: "10px 16px", fontWeight: "bold", fontSize: "13px", background: "#f5f5f5", borderBottom: "1px solid #e0e0e0" }}>
+                <div className="ss-table">
+                  <div className="ss-table__head" style={{ display: "flex", padding: "10px 16px", fontSize: "13px" }}>
                     <span style={{ flex: 3 }}>Email</span>
                     <span style={{ flex: 2 }}>Signed up</span>
                   </div>
-                  {emailSignups.map((s: any, idx: number) => (
-                    <div key={s.id} style={{ display: "flex", padding: "10px 16px", fontSize: "13px", borderBottom: idx < emailSignups.length - 1 ? "1px solid #f0f0f0" : "none" }}>
+                  {emailSignups.map((s: any) => (
+                    <div key={s.id} className="ss-table__row" style={{ display: "flex", padding: "10px 16px", fontSize: "13px" }}>
                       <span style={{ flex: 3 }}>{s.email}</span>
                       <span style={{ flex: 2, color: "#666" }}>{s.createdAt}</span>
                     </div>
@@ -688,24 +680,23 @@ export default function CampaignDetail() {
                 </div>
               )}
             </BlockStack>
-          </Card>
+          </SectionCard>
         )}
 
         {/* ── Shopify Discounts (protection creates none) ── */}
         {!isProtection && (
-        <Card>
+        <SectionCard title="Shopify store discounts" icon="tag" tone="blue">
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">Shopify Store Discounts</Text>
             {shopifyDiscounts.length > 0 ? (
-              <div style={{ border: "1px solid #e0e0e0", borderRadius: "8px", overflow: "hidden" }}>
-                <div style={{ display: "flex", padding: "10px 16px", fontWeight: "bold", fontSize: "13px", background: "#f5f5f5", borderBottom: "1px solid #e0e0e0" }}>
+              <div className="ss-table">
+                <div className="ss-table__head" style={{ display: "flex", padding: "10px 16px", fontSize: "13px" }}>
                   <span style={{ flex: 2 }}>Discount Name</span>
                   <span style={{ flex: 1 }}>Type</span>
                   <span style={{ flex: 1 }}>Status</span>
                   {shopifyDiscounts.some((d: any) => d.code) && <span style={{ flex: 1 }}>Code</span>}
                 </div>
                 {shopifyDiscounts.map((d: any, idx: number) => (
-                  <div key={idx} style={{ display: "flex", padding: "10px 16px", fontSize: "13px", borderBottom: idx < shopifyDiscounts.length - 1 ? "1px solid #f0f0f0" : "none", alignItems: "center" }}>
+                  <div key={idx} className="ss-table__row" style={{ display: "flex", padding: "10px 16px", fontSize: "13px", alignItems: "center" }}>
                     <span style={{ flex: 2, fontWeight: "600" }}>{d.title}</span>
                     <span style={{ flex: 1, fontSize: "12px", color: "#666" }}>
                       {(d.type || "").replace("Discount", "").replace("Automatic", "Auto ").replace("Code", "Code ")}
@@ -723,10 +714,11 @@ export default function CampaignDetail() {
               </Banner>
             )}
           </BlockStack>
-        </Card>
+        </SectionCard>
         )}
 
       </BlockStack>
+      </div>
     </Page>
   );
 }

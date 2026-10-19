@@ -1,14 +1,6 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useNavigate } from "@remix-run/react";
-import {
-  Page, Card, Text, BlockStack, InlineStack, Box, Icon, InlineGrid,
-  Collapsible, Banner, TextField, Divider, Badge,
-} from "@shopify/polaris";
-import {
-  BookOpenIcon, ChatIcon, EmailIcon, ExternalIcon, ChevronRightIcon,
-  ChevronDownIcon, NoteIcon, FlagIcon, SearchIcon,
-} from "@shopify/polaris-icons";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from "react";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -350,6 +342,33 @@ const FAQ_SECTIONS: FAQSection[] = [
   },
 ];
 
+type HelpIconName = "rocket" | "discount" | "puzzle" | "card" | "tool" | "file" | "bulb" | "chat" | "email" | "search" | "arrow" | "external" | "back" | "close";
+
+function HelpIcon({ name, size = 23 }: { name: HelpIconName; size?: number }) {
+  const base = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true as const };
+  const paths: Record<HelpIconName, ReactNode> = {
+    rocket: <><path d="M4.5 16.5 3 21l4.5-1.5 3-3"/><path d="M9 15 5 11l5-5c3-3 7-3.6 11-3-0.5 4-1 8-4 11l-5 5-4-4Z"/><circle cx="15" cy="9" r="2"/><path d="M5 11H2l3-4h4M13 19v3l4-3v-4"/></>,
+    discount: <><path d="M4 4h16v16H4z" rx="4"/><circle cx="8.5" cy="8.5" r="1"/><circle cx="15.5" cy="15.5" r="1"/><path d="m8 16 8-8"/></>,
+    puzzle: <path d="M10 3H7a2 2 0 0 0-2 2v3a2.5 2.5 0 1 1 0 5v5a2 2 0 0 0 2 2h4v-2a2.5 2.5 0 0 1 5 0v2h3a2 2 0 0 0 2-2v-4h-2a2.5 2.5 0 0 1 0-5h2V5a2 2 0 0 0-2-2h-4v2a2.5 2.5 0 1 1-5 0V3Z"/>,
+    card: <><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M2 9h20M6 15h5"/></>,
+    tool: <><path d="M14 6a5 5 0 0 0-6 6l-5.5 5.5a2.1 2.1 0 0 0 3 3L11 15a5 5 0 0 0 6-6l-3.5 3.5-3-3L14 6Z"/></>,
+    file: <><path d="M6 2h8l5 5v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z"/><path d="M14 2v6h5M8 12h8M8 16h8"/></>,
+    bulb: <><path d="M9 18h6M10 21h4M9 15c-1.8-1.3-3-3-3-5a6 6 0 0 1 12 0c0 2-1.2 3.7-3 5l-.5 3h-5L9 15Z"/></>,
+    chat: <><path d="M20 11.5a8 8 0 0 1-8 8c-1.3 0-2.5-.3-3.6-.8L4 20l1.4-4A8 8 0 1 1 20 11.5Z"/><path d="M8 11.5h.1M12 11.5h.1M16 11.5h.1" strokeWidth="3"/></>,
+    email: <><rect x="2" y="5" width="20" height="14" rx="2"/><path d="m3 7 9 7 9-7"/></>,
+    search: <><circle cx="10.7" cy="10.7" r="6.5"/><path d="m16 16 5 5"/></>,
+    arrow: <path d="m9 5 7 7-7 7"/>,
+    external: <><path d="M13 5h6v6M19 5l-9 9"/><path d="M19 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4"/></>,
+    back: <><path d="m12 19-7-7 7-7M5 12h15"/></>,
+    close: <path d="M6 6 18 18M18 6 6 18"/>,
+  };
+  return <svg {...base}>{paths[name]}</svg>;
+}
+
+const CATEGORY_ICONS: Record<string, HelpIconName> = {
+  "getting-started": "rocket", campaigns: "discount", customization: "puzzle", billing: "card", troubleshooting: "tool",
+};
+
 export default function HelpAndSupport() {
   const navigate = useNavigate();
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -357,6 +376,7 @@ export default function HelpAndSupport() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showChatBanner, setShowChatBanner] = useState(false);
   const [showEmailBanner, setShowEmailBanner] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const toggleItem = useCallback((id: string) => {
     setExpandedItems((prev) => {
@@ -366,7 +386,6 @@ export default function HelpAndSupport() {
       return next;
     });
   }, []);
-
   const toggleSection = useCallback((id: string) => {
     setExpandedSections((prev) => {
       const next = new Set(prev);
@@ -375,285 +394,108 @@ export default function HelpAndSupport() {
       return next;
     });
   }, []);
-
-  // Filter FAQ items based on search
   const filteredSections = useMemo(() => {
     if (!searchQuery.trim()) return FAQ_SECTIONS;
     const q = searchQuery.toLowerCase();
     return FAQ_SECTIONS.map((section) => ({
       ...section,
-      items: section.items.filter(
-        (item) =>
-          item.question.toLowerCase().includes(q) ||
-          item.answer.some((line) => line.toLowerCase().includes(q))
-      ),
+      items: section.items.filter((item) => item.question.toLowerCase().includes(q) || item.answer.some((line) => line.toLowerCase().includes(q))),
     })).filter((section) => section.items.length > 0);
   }, [searchQuery]);
-
   const totalResults = filteredSections.reduce((sum, s) => sum + s.items.length, 0);
 
+  useEffect(() => {
+    const onShortcut = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onShortcut);
+    return () => document.removeEventListener("keydown", onShortcut);
+  }, []);
+
   return (
-    <Page backAction={{ content: "Home", url: "/app" }} title="Help & Support">
-      <BlockStack gap="400">
-        {showChatBanner && (
-          <Banner tone="success" onDismiss={() => setShowChatBanner(false)}>
-            <p>Live chat opened! Our team typically responds within 2-3 minutes during business hours.</p>
-          </Banner>
-        )}
-        {showEmailBanner && (
-          <Banner tone="success" onDismiss={() => setShowEmailBanner(false)}>
-            <p>Email compose opened! Send us your question and we'll get back to you within a few hours.</p>
-          </Banner>
-        )}
+    <main className="sd-help">
+      <style>{HELP_STYLES}</style>
+      <div className="sd-help__shell">
+        <header className="sd-help__header">
+          <button type="button" className="sd-help__back" aria-label="Back to home" onClick={() => navigate("/app")}><HelpIcon name="back" /></button>
+          <div className="sd-help__intro">
+            <h1>Help &amp; Support</h1>
+            <p>Find answers, learn how to use Discountly, or get in touch with our support team.</p>
+          </div>
+          <div className="sd-help__header-art" aria-hidden="true"><span className="sd-help__bubble">?</span><span className="sd-help__decor-line"/><span className="sd-help__decor-line"/><span className="sd-help__decor-line"/></div>
+        </header>
 
-        {/* Search */}
-        <Card>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">How can we help you?</Text>
-            <TextField
-              label=""
-              labelHidden
-              placeholder="Search for answers... e.g. 'how to create discount' or 'countdown timer'"
-              value={searchQuery}
-              onChange={setSearchQuery}
-              autoComplete="off"
-              prefix={<Icon source={SearchIcon} />}
-              clearButton
-              onClearButtonClick={() => setSearchQuery("")}
-            />
-            {searchQuery && (
-              <Text as="p" variant="bodySm" tone="subdued">
-                {totalResults} result{totalResults !== 1 ? "s" : ""} found
-              </Text>
-            )}
-          </BlockStack>
-        </Card>
+        {showChatBanner && <div className="sd-help__notice" role="status">Email compose opened for your chat request. <button type="button" onClick={() => setShowChatBanner(false)} aria-label="Dismiss notification"><HelpIcon name="close" size={16}/></button></div>}
+        {showEmailBanner && <div className="sd-help__notice" role="status">Email compose opened! Send your support question. <button type="button" onClick={() => setShowEmailBanner(false)} aria-label="Dismiss notification"><HelpIcon name="close" size={16}/></button></div>}
 
-        {/* FAQ Sections */}
-        {filteredSections.map((section) => (
-          <Card key={section.id} padding="0">
-            {/* Section Header */}
-            <div
-              onClick={() => toggleSection(section.id)}
-              style={{
-                padding: "16px 20px",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                transition: "background 0.15s",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#f9fafb")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
-                <span style={{ fontSize: "20px" }}>{section.icon}</span>
-                <div>
-                  <InlineStack gap="200" blockAlign="center">
-                    <Text as="h2" variant="headingSm">{section.title}</Text>
-                    {section.badge && <Badge tone="info">{section.badge}</Badge>}
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    {section.items.length} article{section.items.length !== 1 ? "s" : ""}
-                  </Text>
+        <div className="sd-help__search-wrap">
+          <div className="sd-help__search-box">
+            <HelpIcon name="search" size={22}/>
+            <input ref={searchRef} aria-label="Search help articles" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={'Search for answers... e.g. “How to create discount” or “countdown timer”'}/>
+            {searchQuery ? <button type="button" className="sd-help__clear" onClick={() => setSearchQuery("")} aria-label="Clear search"><HelpIcon name="close" size={17}/></button> : <kbd>⌘ K</kbd>}
+          </div>
+          {searchQuery && <span className="sd-help__results">{totalResults} result{totalResults === 1 ? "" : "s"} found</span>}
+        </div>
+
+        <div className="sd-help__categories">
+          {filteredSections.map((section) => {
+            const expanded = expandedSections.has(section.id) || !!searchQuery;
+            return (
+              <section className={`sd-help__category sd-help__category--${section.id}`} key={section.id}>
+                <button type="button" className="sd-help__category-head" aria-expanded={expanded} aria-controls={`section-${section.id}`} onClick={() => toggleSection(section.id)}>
+                  <span className="sd-help__category-icon"><HelpIcon name={CATEGORY_ICONS[section.id]}/></span>
+                  <span className="sd-help__category-name"><span className="sd-help__category-title">{section.title} {section.badge && <span className="sd-help__popular">{section.badge}</span>}</span><span className="sd-help__category-count">{section.items.length} article{section.items.length === 1 ? "" : "s"}</span></span>
+                  <span className={`sd-help__chevron ${expanded ? "is-open" : ""}`}><HelpIcon name="arrow" size={19}/></span>
+                </button>
+                <div id={`section-${section.id}`} className="sd-help__section-body" hidden={!expanded}>
+                  <div className="sd-help__articles">
+                    {section.items.map((item) => {
+                      const isOpen = expandedItems.has(item.id);
+                      return <div className="sd-help__article" key={item.id}>
+                        <button type="button" className="sd-help__question" aria-expanded={isOpen} aria-controls={`item-${item.id}`} onClick={() => toggleItem(item.id)}>
+                          <span className="sd-help__doc-icon"><HelpIcon name="file" size={19}/></span><span>{item.question}</span><span className={`sd-help__chevron ${isOpen ? "is-open" : ""}`}><HelpIcon name="arrow" size={18}/></span>
+                        </button>
+                        <div id={`item-${item.id}`} hidden={!isOpen} className="sd-help__answer">{item.answer.map((line, i) => <p key={i}>{line}</p>)}</div>
+                      </div>;
+                    })}
+                  </div>
                 </div>
-              </div>
-              <div style={{ flexShrink: 0 }}>
-                <Icon
-                  source={expandedSections.has(section.id) ? ChevronDownIcon : ChevronRightIcon}
-                  tone="subdued"
-                />
-              </div>
-            </div>
+              </section>
+            );
+          })}
+          {searchQuery && totalResults === 0 && <div className="sd-help__empty"><strong>No articles found for “{searchQuery}”</strong><p>Try different keywords or contact our support team below.</p></div>}
+        </div>
 
-            {/* Section Items */}
-            <Collapsible
-              open={expandedSections.has(section.id) || !!searchQuery}
-              id={`section-${section.id}`}
-              transition={{ duration: "200ms", timingFunction: "ease-in-out" }}
-            >
-              {section.items.map((item, itemIndex) => (
-                <div key={item.id}>
-                  {/* Question */}
-                  <div
-                    onClick={() => toggleItem(item.id)}
-                    style={{
-                      padding: "14px 20px 14px 56px",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      borderTop: "1px solid #f0f0f0",
-                      transition: "background 0.15s",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f9fafb")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  >
-                    <Text as="span" variant="bodyMd" fontWeight={expandedItems.has(item.id) ? "bold" : "regular"}>
-                      {item.question}
-                    </Text>
-                    <div style={{ flexShrink: 0, marginLeft: "12px" }}>
-                      <Icon
-                        source={expandedItems.has(item.id) ? ChevronDownIcon : ChevronRightIcon}
-                        tone="subdued"
-                      />
-                    </div>
-                  </div>
+        <div className="sd-help__quick-links">
+          <a className="sd-help__quick" href="https://smartdiscounts.app/changelog" target="_blank" rel="noopener noreferrer"><span className="sd-help__quick-icon sd-help__quick-icon--note"><HelpIcon name="file"/></span><span><strong>Release Notes</strong><small>See what's new and improved</small></span><HelpIcon name="external" size={19}/></a>
+          <a className="sd-help__quick" href="https://smartdiscounts.app/feature-request" target="_blank" rel="noopener noreferrer"><span className="sd-help__quick-icon sd-help__quick-icon--bulb"><HelpIcon name="bulb"/></span><span><strong>Feature Request</strong><small>Suggest new features</small></span><HelpIcon name="external" size={19}/></a>
+        </div>
 
-                  {/* Answer */}
-                  <Collapsible
-                    open={expandedItems.has(item.id)}
-                    id={`item-${item.id}`}
-                    transition={{ duration: "200ms", timingFunction: "ease-in-out" }}
-                  >
-                    <div style={{ padding: "0 20px 16px 56px" }}>
-                      <Box padding="400" background="bg-surface-secondary" borderRadius="200">
-                        <BlockStack gap="200">
-                          {item.answer.map((line, i) => (
-                            <Text key={i} as="p" variant="bodySm" tone={line.startsWith("1.") || line.startsWith("2.") || line.startsWith("3.") || line.startsWith("4.") || line.startsWith("5.") || line.startsWith("6.") || line.startsWith("7.") ? "subdued" : undefined}>
-                              {line}
-                            </Text>
-                          ))}
-                        </BlockStack>
-                      </Box>
-                    </div>
-                  </Collapsible>
-                </div>
-              ))}
-            </Collapsible>
-          </Card>
-        ))}
-
-        {/* No results */}
-        {searchQuery && totalResults === 0 && (
-          <Card>
-            <BlockStack gap="300" inlineAlign="center">
-              <Text as="p" variant="bodyMd" alignment="center">
-                No articles found for "{searchQuery}"
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                Try different keywords or contact our support team below
-              </Text>
-            </BlockStack>
-          </Card>
-        )}
-
-        <Divider />
-
-        {/* Quick Links */}
-        <InlineGrid columns={2} gap="400">
-          <Card padding="0">
-            <div
-              onClick={() => window.open("https://smartdiscounts.app/changelog", "_blank")}
-              style={{ padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", transition: "background 0.15s" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#f9fafb")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              <InlineStack gap="300" blockAlign="center">
-                <Icon source={NoteIcon} tone="base" />
-                <BlockStack gap="0">
-                  <Text as="h3" variant="headingSm">Release Notes</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">See what's new and improved</Text>
-                </BlockStack>
-              </InlineStack>
-              <Icon source={ExternalIcon} tone="subdued" />
-            </div>
-          </Card>
-
-          <Card padding="0">
-            <div
-              onClick={() => window.open("https://smartdiscounts.app/feature-request", "_blank")}
-              style={{ padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", transition: "background 0.15s" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#f9fafb")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              <InlineStack gap="300" blockAlign="center">
-                <Icon source={FlagIcon} tone="base" />
-                <BlockStack gap="0">
-                  <Text as="h3" variant="headingSm">Feature Request</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">Suggest new features</Text>
-                </BlockStack>
-              </InlineStack>
-              <Icon source={ExternalIcon} tone="subdued" />
-            </div>
-          </Card>
-        </InlineGrid>
-
-        {/* Contact Support */}
-        <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">Still need help?</Text>
-            <Text as="p" variant="bodySm" tone="subdued">
-              Can't find what you're looking for? Our support team is ready to assist you.
-            </Text>
-            <InlineGrid columns={2} gap="400">
-              <div
-                onClick={() => {
-                  setShowChatBanner(true);
-                  window.open("mailto:support@smartdiscounts.app?subject=Live%20Chat%20Request", "_blank");
-                }}
-                style={{
-                  cursor: "pointer",
-                  border: "1px solid #e0e0e0",
-                  borderRadius: "12px",
-                  padding: "20px",
-                  textAlign: "center",
-                  transition: "all 0.2s",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#10b981"; e.currentTarget.style.background = "#f0fdf4"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e0e0e0"; e.currentTarget.style.background = "transparent"; }}
-              >
-                <BlockStack gap="200" inlineAlign="center">
-                  <div style={{
-                    width: "52px", height: "52px", borderRadius: "50%",
-                    background: "#f0fdf4", display: "flex", alignItems: "center",
-                    justifyContent: "center", margin: "0 auto",
-                  }}>
-                    <Icon source={ChatIcon} tone="base" />
-                  </div>
-                  <Text as="h3" variant="headingSm" alignment="center">Chat with us</Text>
-                  <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                    Talk with our team now.
-                  </Text>
-                  <Badge tone="success">Typically replies in minutes</Badge>
-                </BlockStack>
-              </div>
-
-              <div
-                onClick={() => {
-                  setShowEmailBanner(true);
-                  window.open("mailto:support@smartdiscounts.app?subject=Support%20Request%20-%20SmartDiscounts", "_blank");
-                }}
-                style={{
-                  cursor: "pointer",
-                  border: "1px solid #e0e0e0",
-                  borderRadius: "12px",
-                  padding: "20px",
-                  textAlign: "center",
-                  transition: "all 0.2s",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.background = "#eff6ff"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e0e0e0"; e.currentTarget.style.background = "transparent"; }}
-              >
-                <BlockStack gap="200" inlineAlign="center">
-                  <div style={{
-                    width: "52px", height: "52px", borderRadius: "50%",
-                    background: "#eff6ff", display: "flex", alignItems: "center",
-                    justifyContent: "center", margin: "0 auto",
-                  }}>
-                    <Icon source={EmailIcon} tone="base" />
-                  </div>
-                  <Text as="h3" variant="headingSm" alignment="center">Email us</Text>
-                  <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                    Send us a detailed message.
-                  </Text>
-                  <Badge tone="info">Replies within a few hours</Badge>
-                </BlockStack>
-              </div>
-            </InlineGrid>
-          </BlockStack>
-        </Card>
-      </BlockStack>
-    </Page>
+        <section className="sd-help__contact">
+          <h2>Still need help?</h2><p>Can't find what you're looking for? Our support team is ready to assist you.</p>
+          <div className="sd-help__contact-grid">
+            <a className="sd-help__contact-card sd-help__contact-card--chat" href="mailto:support@smartdiscounts.app?subject=Live%20Chat%20Request" onClick={() => setShowChatBanner(true)}>
+              <span className="sd-help__contact-icon"><HelpIcon name="chat"/></span><strong>Chat with us</strong><span>Talk with our team now.</span><em>Typically replies in minutes <span>→</span></em>
+            </a>
+            <a className="sd-help__contact-card sd-help__contact-card--email" href="mailto:support@smartdiscounts.app?subject=Support%20Request%20-%20SmartDiscounts" onClick={() => setShowEmailBanner(true)}>
+              <span className="sd-help__contact-icon"><HelpIcon name="email"/></span><strong>Email us</strong><span>Send us a detailed message.</span><em>Replies within a few hours <span>→</span></em>
+            </a>
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }
+
+const HELP_STYLES = `
+.sd-help{min-height:100vh;background:radial-gradient(ellipse at 88% -6%,#dcecff 0%,transparent 38%),linear-gradient(135deg,#f9fcff 0%,#eff7ff 63%,#e7f2ff 100%);color:#080f31;padding:24px 24px 34px;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.sd-help *{box-sizing:border-box}.sd-help__shell{max-width:1100px;margin:auto}.sd-help button,.sd-help input{font:inherit}.sd-help button{cursor:pointer}.sd-help__header{display:flex;align-items:flex-start;position:relative;gap:20px;min-height:74px;margin-bottom:20px;overflow:hidden}.sd-help__back{flex-shrink:0;display:grid;place-items:center;background:none;border:0;color:#3558b2;width:30px;height:42px}.sd-help__intro{position:relative;z-index:1}.sd-help__intro h1{font-size:29px;line-height:1.18;letter-spacing:-1px;margin:0 0 7px;font-weight:800}.sd-help__intro p{margin:0;color:#57709f;font-size:14px}.sd-help__header-art{position:absolute;right:24px;top:-14px;width:220px;height:110px;border-radius:0px;background:linear-gradient(135deg,#e3f1ff,#f8fbff);opacity:.9}.sd-help__bubble{position:absolute;top:13px;left:30px;display:grid;place-items:center;background:linear-gradient(135deg,#a7c6ff,#315eff);color:white;font-size:43px;font-weight:800;width:76px;height:64px;border-radius:26px;box-shadow:0 12px 30px #527ffb36}.sd-help__bubble:after{content:"";position:absolute;bottom:-8px;left:19px;border-top:13px solid #537eff;border-right:12px solid transparent}.sd-help__decor-line{position:absolute;left:112px;top:30px;width:60px;height:12px;background:#a8caff;border-radius:20px}.sd-help__decor-line:nth-of-type(3){top:58px;width:92px}.sd-help__decor-line:nth-of-type(4){top:85px;width:72px}
+.sd-help__search-wrap,.sd-help__category,.sd-help__quick,.sd-help__contact{border:1px solid #deebff;background:linear-gradient(132deg,#fff 65%,#f5faff);box-shadow:0 6px 20px rgba(54,110,187,.055);border-radius:16px}.sd-help__search-wrap{padding:12px;margin-bottom:15px}.sd-help__search-box{border:1px solid #dce8fa;box-shadow:inset 0 0 0 1px #f1f5ff;border-radius:12px;padding:0 14px;display:flex;align-items:center;gap:13px;min-height:50px;color:#34519b}.sd-help__search-box:focus-within{border-color:#5e76ff;box-shadow:0 0 0 3px #657bff20}.sd-help__search-box input{flex:1;min-width:0;background:transparent;border:0;outline:0;font-size:14px;color:#101b3e}.sd-help__search-box input::placeholder{color:#546a94;opacity:1}.sd-help__search-box kbd{font-family:inherit;border-radius:8px;background:#f1f5ff;color:#4a5f8c;padding:6px 10px;font-size:12px;white-space:nowrap}.sd-help__clear{border:0;background:transparent;color:#61729f;display:grid;place-items:center}.sd-help__results{display:block;margin:9px 8px 1px;color:#61729f;font-size:12px}
+.sd-help__categories{display:grid;gap:12px}.sd-help__category{overflow:hidden;position:relative}.sd-help__category:before,.sd-help__contact:before{content:"";position:absolute;right:-22px;top:-75px;width:230px;height:135px;background:linear-gradient(135deg,transparent,#ddeeff88);border-radius:0 0 55% 55%;pointer-events:none}.sd-help__category--campaigns:before{background:linear-gradient(135deg,transparent,#efe7ffb5)}.sd-help__category--customization:before{background:linear-gradient(135deg,transparent,#d9fbf0c0)}.sd-help__category--billing:before{background:linear-gradient(135deg,transparent,#ffefdaba)}.sd-help__category--troubleshooting:before{background:linear-gradient(135deg,transparent,#e0eeff)}.sd-help__category-head{width:100%;display:flex;align-items:center;gap:20px;text-align:left;border:0;padding:12px 21px;background:transparent;position:relative;color:inherit;min-height:71px}.sd-help__category-head:hover{background:#f8fbff80}.sd-help__category-icon,.sd-help__quick-icon{width:54px;height:54px;flex-shrink:0;border-radius:14px;display:grid;place-items:center;color:#315aff;background:linear-gradient(135deg,#e0e9ff,#cfe2ff)}.sd-help__category--campaigns .sd-help__category-icon{background:#f1e4ff;color:#8242e7}.sd-help__category--customization .sd-help__category-icon{background:#dcfaed;color:#00b878}.sd-help__category--billing .sd-help__category-icon{background:#fff0db;color:#f99400}.sd-help__category--troubleshooting .sd-help__category-icon{background:#e3f0ff;color:#1977ed}.sd-help__category-name{display:flex;flex-direction:column;gap:4px;flex:1}.sd-help__category-title{font-weight:750;font-size:16px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}.sd-help__category-count{font-size:13px;color:#5e74a0}.sd-help__popular{font-size:12px;color:#006aff;background:#deefff;border-radius:20px;padding:5px 10px;font-weight:600}.sd-help__chevron{margin-left:auto;display:grid;place-items:center;color:#4468ba;transition:transform .2s}.sd-help__chevron.is-open{transform:rotate(90deg)}.sd-help__articles{margin:0 19px 12px;border:1px solid #e1eafa;border-radius:14px;padding:0 20px;background:#ffffffc7}.sd-help__article+.sd-help__article{border-top:1px solid #e8eef8}.sd-help__question{display:flex;align-items:center;gap:20px;text-align:left;width:100%;min-height:48px;background:transparent;border:0;color:#0d1a42;padding:10px 1px;font-size:14px}.sd-help__question:hover{color:#315aff}.sd-help__doc-icon{color:#4b98fc;display:grid;place-items:center;flex-shrink:0;width:35px}.sd-help__answer{padding:4px 38px 17px 55px;color:#50648b;font-size:13px;line-height:1.55}.sd-help__answer p{margin:0 0 8px}.sd-help__answer p:last-child{margin-bottom:0}.sd-help__empty{border-radius:15px;background:white;padding:25px;text-align:center;color:#152449}.sd-help__empty p{color:#6680aa}
+.sd-help__quick-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.sd-help__quick{display:flex;align-items:center;gap:17px;padding:13px 20px;text-decoration:none;color:#111c40;transition:transform .2s,box-shadow .2s}.sd-help__quick:hover,.sd-help__contact-card:hover{transform:translateY(-2px);box-shadow:0 10px 30px #4269ac1c}.sd-help__quick>span:nth-child(2){display:flex;flex-direction:column;gap:4px;flex:1}.sd-help__quick strong{font-size:15px}.sd-help__quick small{font-size:13px;color:#5d73a3}.sd-help__quick>svg{color:#7b92c2}.sd-help__quick-icon--note{background:#e9eaff;color:#4155ff}.sd-help__quick-icon--bulb{background:#fff4e3;color:#f49600}
+.sd-help__contact{margin-top:14px;padding:20px;position:relative;overflow:hidden}.sd-help__contact h2{font-size:18px;font-weight:800;letter-spacing:-.3px;position:relative;margin:0 0 5px}.sd-help__contact>p{margin:0 0 15px;color:#5c75a5;font-size:13px;position:relative}.sd-help__contact-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;position:relative}.sd-help__contact-card{border:1px solid #dae7fa;border-radius:14px;min-height:154px;background:#ffffffae;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;text-decoration:none;color:#101b40;padding:12px;transition:transform .2s,box-shadow .2s,border-color .2s}.sd-help__contact-card:hover{border-color:#9cbeff}.sd-help__contact-icon{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:#dcfaed;color:#00ae72;margin-bottom:2px}.sd-help__contact-card--email .sd-help__contact-icon{background:#e4f0ff;color:#147cff}.sd-help__contact-card strong{font-size:14px}.sd-help__contact-card>span:not(.sd-help__contact-icon){font-size:13px;color:#657bad}.sd-help__contact-card em{font-size:12px;border-radius:30px;padding:7px 14px;background:#d3fae7;color:#00995c;font-style:normal;font-weight:650}.sd-help__contact-card--email em{background:#e0eeff;color:#0076f5}.sd-help__contact-card em span{margin-left:8px}.sd-help__notice{padding:12px 16px;border-radius:12px;background:#e2f8e9;color:#125932;margin:12px 0;display:flex;justify-content:space-between;align-items:center;font-size:13px}.sd-help__notice button{background:transparent;border:0;color:inherit}
+@media(max-width:750px){.sd-help{padding:18px 12px 30px}.sd-help__header{gap:8px}.sd-help__intro h1{font-size:23px}.sd-help__intro p{font-size:12px;line-height:1.5}.sd-help__header-art{opacity:.18;right:-75px}.sd-help__category-head{padding:11px 13px;gap:12px}.sd-help__category-title{font-size:14px}.sd-help__category-icon,.sd-help__quick-icon{width:44px;height:44px;border-radius:12px}.sd-help__articles{margin:0 9px 10px;padding:0 10px}.sd-help__question{gap:8px;font-size:12px}.sd-help__doc-icon{width:24px}.sd-help__answer{padding:5px 8px 15px 31px}.sd-help__quick-links,.sd-help__contact-grid{grid-template-columns:1fr}.sd-help__contact{padding:15px}.sd-help__contact-card{min-height:145px}.sd-help__quick{padding:12px}.sd-help__search-box input{font-size:12px}.sd-help__search-box kbd{display:none}}
+`;

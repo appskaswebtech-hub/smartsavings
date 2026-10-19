@@ -8,7 +8,6 @@ import {
 import { useLoaderData, useNavigate, useSubmit, useActionData } from "@remix-run/react";
 import {
   Page,
-  Card,
   Text,
   BlockStack,
   InlineStack,
@@ -52,6 +51,7 @@ import {
 import { deleteManagedProducts, ensureFeeProduct } from "../shippingProtectionProduct.server";
 import { getShopDisplayName } from "../lib/shopName.server";
 import { ShippingProtectionForm, ShippingProtectionPreview } from "../components/ShippingProtectionForm";
+import { PageHeader, SectionCard } from "../components/Theme";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   bulk_price: "Bulk price editor",
@@ -680,9 +680,8 @@ function DiscountPreview({
     "Applies to specific collections";
 
   return (
-    <Card>
+    <SectionCard title="Discount preview" icon="eye" tone="sky">
       <BlockStack gap="400">
-        <Text as="h2" variant="headingMd">Discount preview</Text>
 
         <Box background="bg-surface-secondary" borderRadius="200" padding="400">
           <BlockStack gap="300">
@@ -904,7 +903,7 @@ function DiscountPreview({
           </BlockStack>
         </BlockStack>
       </BlockStack>
-    </Card>
+    </SectionCard>
   );
 }
 
@@ -1247,17 +1246,23 @@ export default function NewCampaign() {
   // ── Render ────────────────────────────────────────────────────
 
   return (
-    <Page
-      backAction={{ content: "Choose campaign type", url: "/app/campaigns/create" }}
-      title={`Create ${CAMPAIGN_TYPE_LABELS[type] || "Campaign"}`}
-      primaryAction={{
-        content: "Save campaign",
-        onAction: handleSave,
-        loading: isSubmitting,
-        disabled: isSubmitting,
-      }}
-      secondaryActions={[{ content: "Discard", onAction: () => navigate("/app/campaigns") }]}
-    >
+    <Page fullWidth>
+      <div className="ss-page">
+      <PageHeader
+        backTo="/app/campaigns/create"
+        backLabel="Choose campaign type"
+        title={`Create ${CAMPAIGN_TYPE_LABELS[type] || "Campaign"}`}
+        subtitle={CAMPAIGN_TYPE_DESCRIPTIONS[type]}
+        primaryAction={{
+          content: "Save campaign",
+          icon: "save",
+          onAction: handleSave,
+          loading: isSubmitting,
+          disabled: isSubmitting,
+        }}
+        secondaryActions={[{ content: "Discard", onAction: () => navigate("/app/campaigns") }]}
+      />
+
       {actionData && !actionData.success && (
         <Box paddingBlockEnd="400">
           <Banner tone="critical"><p>{actionData.error}</p></Banner>
@@ -1268,16 +1273,9 @@ export default function NewCampaign() {
         {/* ── Left Column ─────────────────────────────────── */}
         <Layout.Section>
           <BlockStack gap="400">
-            <Banner tone="info">
-              <p>
-                <strong>{CAMPAIGN_TYPE_LABELS[type]}</strong> — {CAMPAIGN_TYPE_DESCRIPTIONS[type]}
-              </p>
-            </Banner>
-
             {/* Campaign Details */}
-            <Card>
+            <SectionCard title="Campaign details" icon="info" tone="blue">
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Campaign details</Text>
                 <TextField
                   label="Campaign name"
                   value={name}
@@ -1298,7 +1296,7 @@ export default function NewCampaign() {
                   onChange={setStatus}
                 />
               </BlockStack>
-            </Card>
+            </SectionCard>
 
             {type === SHIPPING_PROTECTION && (
               <ShippingProtectionForm
@@ -1311,9 +1309,8 @@ export default function NewCampaign() {
 
             {/* Discount Configuration */}
             {type !== SHIPPING_PROTECTION && (
-            <Card>
+            <SectionCard title="Discount configuration" icon="percent" tone="violet">
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Discount configuration</Text>
 
                 {type === "bulk_price" && (
                   <FormLayout>
@@ -1361,7 +1358,7 @@ export default function NewCampaign() {
                     />
                     {tiers.map((tier, i) => (
                       <InlineStack key={i} gap="200" blockAlign="end">
-                        <div style={{ flex: 1 }}>
+                        <div className="ss-field">
                           <TextField
                             label={i === 0 ? "Min quantity" : ""}
                             type="number"
@@ -1373,7 +1370,7 @@ export default function NewCampaign() {
                             suffix="+"
                           />
                         </div>
-                        <div style={{ flex: 1 }}>
+                        <div className="ss-field">
                           <TextField
                             label={i === 0 ? "Discount" : ""}
                             type="number"
@@ -1549,7 +1546,7 @@ export default function NewCampaign() {
                             />
                             <InlineStack gap="200" blockAlign="end">
                               {showAmount && (
-                                <div style={{ flex: 1 }}>
+                                <div className="ss-field">
                                   <TextField
                                     label="Min order value"
                                     type="number"
@@ -1562,7 +1559,7 @@ export default function NewCampaign() {
                                 </div>
                               )}
                               {showQty && (
-                                <div style={{ flex: 1 }}>
+                                <div className="ss-field">
                                   <TextField
                                     label="Min quantity"
                                     type="number"
@@ -1574,7 +1571,7 @@ export default function NewCampaign() {
                                   />
                                 </div>
                               )}
-                              <div style={{ flex: 1 }}>
+                              <div className="ss-field">
                                 <TextField
                                   label="Discount"
                                   type="number"
@@ -1684,14 +1681,13 @@ export default function NewCampaign() {
                   </FormLayout>
                 )}
               </BlockStack>
-            </Card>
+            </SectionCard>
             )}
 
             {/* ── Products Card ─────────────────────────────── */}
             {type !== SHIPPING_PROTECTION && (
-            <Card>
+            <SectionCard title="Products" icon="box" tone="amber">
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Products</Text>
 
                 <Select
                   label="Applies to"
@@ -1867,14 +1863,13 @@ export default function NewCampaign() {
                   </BlockStack>
                 )}
               </BlockStack>
-            </Card>
+            </SectionCard>
             )}
 
             {/* ── Discount popup (advanced_discount_code only) ─── */}
             {type === "advanced_discount_code" && (
-              <Card>
+              <SectionCard title="Discount popup" icon="mail" tone="rose">
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">Discount popup</Text>
                   <Checkbox
                     label="Show a popup that collects emails and sends this discount code"
                     checked={popupEnabled}
@@ -2025,13 +2020,12 @@ export default function NewCampaign() {
                     </BlockStack>
                   )}
                 </BlockStack>
-              </Card>
+              </SectionCard>
             )}
 
             {/* Schedule */}
-            <Card>
+            <SectionCard title="Schedule" icon="calendar" tone="mint">
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Schedule</Text>
                 <Checkbox label="Start immediately" checked={startNow} onChange={setStartNow} />
                 {!startNow && (
                   <TextField label="Start date" type="date" value={startDate} onChange={setStartDate} autoComplete="off" />
@@ -2041,7 +2035,7 @@ export default function NewCampaign() {
                   <TextField label="End date" type="date" value={endDate} onChange={setEndDate} autoComplete="off" />
                 )}
               </BlockStack>
-            </Card>
+            </SectionCard>
           </BlockStack>
         </Layout.Section>
 
@@ -2070,6 +2064,7 @@ export default function NewCampaign() {
           )}
         </Layout.Section>
       </Layout>
+      </div>
     </Page>
   );
 }

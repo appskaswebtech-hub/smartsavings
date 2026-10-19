@@ -333,6 +333,8 @@ interface CampaignData {
   requirementType?: string | null; // amount | quantity | both | either (shipping_discount)
   discountCode: string | null;
   geoTarget: string | null;
+  /** draft | active | scheduled — passed by both campaign forms. */
+  status?: string;
 }
 
 function getItemsFilter(campaign: CampaignData) {

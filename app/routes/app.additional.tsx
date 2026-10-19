@@ -13,6 +13,7 @@ import {
 } from "@shopify/polaris";
 import { ExternalIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
+import { PageHeader } from "../components/Theme";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -64,14 +65,16 @@ export default function Additional() {
   ];
 
   return (
-    <Page backAction={{ content: "Home", url: "/app" }} title="Additional Resources">
+    <Page fullWidth>
+      <div className="ss-page">
+      <PageHeader
+        backTo="/app"
+        backLabel="Home"
+        title="Additional Resources"
+        subtitle="Explore additional resources, guides, and tools to get the most out of Discounty."
+      />
       <BlockStack gap="400">
-        <Text as="p" variant="bodyMd" tone="subdued">
-          Explore additional resources, guides, and tools to get the most out of
-          Discounty.
-        </Text>
-
-        <InlineGrid columns={2} gap="400">
+        <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
           {resources.map((resource, index) => (
             <Card key={index}>
               <BlockStack gap="300">
@@ -101,6 +104,7 @@ export default function Additional() {
           ))}
         </InlineGrid>
       </BlockStack>
+      </div>
     </Page>
   );
 }

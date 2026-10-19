@@ -1,11 +1,12 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit } from "@remix-run/react";
 import { useIsSaving } from "../lib/useIsSaving";
-import { Page, Card, Text, BlockStack, InlineStack, Button, Box, Checkbox, Layout, RangeSlider, Banner } from "@shopify/polaris";
+import { Page, Text, BlockStack, InlineStack, Button, Box, Checkbox, Layout, RangeSlider, Banner } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { ColorPickerInput, StickyPreview, DeviceMockup, PlaceholderLines, LayoutControls, type LayoutValue } from "../components/CustomizationWidgets";
+import { PageHeader, SectionCard } from "../components/Theme";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -45,20 +46,27 @@ export default function BxgyFab() {
   };
 
   return (
-    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Buy X get Y Floating button" subtitle="Customize FAB style shown after closing pop-up." primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: isSaving }}>
+    <Page fullWidth>
+      <div className="ss-page">
+      <PageHeader
+        backTo="/app/customization"
+        backLabel="Customization"
+        title="Buy X get Y Floating button"
+        subtitle="Customize FAB style shown after closing pop-up."
+        primaryAction={{ content: "Save", icon: "save", onAction: handleSave, loading: isSaving, disabled: isSaving }}
+      />
       {saved && <Box paddingBlockEnd="400"><Banner tone="success" title="Settings saved!" onDismiss={() => setSaved(false)} /></Box>}
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
-            <Card><InlineStack align="space-between" blockAlign="center"><InlineStack gap="200"><span>👁</span><Text as="h2" variant="headingSm">Display widget on store</Text></InlineStack><Button onClick={() => setEnabled(!enabled)} variant={enabled ? "primary" : undefined} size="slim">{enabled ? "ON" : "OFF"}</Button></InlineStack></Card>
-            <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>⚙️</span><Text as="h2" variant="headingSm">General</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><Checkbox label="Remove close button" checked={removeCloseButton} onChange={setRemoveCloseButton} /><Text as="p" variant="bodySm" fontWeight="bold">Floating button position</Text><InlineStack gap="200"><Button size="slim" variant={position === "left" ? "primary" : undefined} onClick={() => setPosition("left")}>Left</Button><Button size="slim" variant={position === "right" ? "primary" : undefined} onClick={() => setPosition("right")}>Right</Button></InlineStack><RangeSlider label="Floating button radius" value={fabRadius} onChange={(v) => setFabRadius(v as number)} min={0} max={50} output /></BlockStack></Card>
-            <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Colors</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><ColorPickerInput label="Floating button background" value={fabBg} onChange={setFabBg} /><ColorPickerInput label="Floating button icon" value={fabIcon} onChange={setFabIcon} /><ColorPickerInput label="Close button color" value={closeBtnColor} onChange={setCloseBtnColor} /><ColorPickerInput label="Close button icon" value={closeIconColor} onChange={setCloseIconColor} /></BlockStack></Card>
-            <Card><BlockStack gap="400"><InlineStack gap="200"><span>📐</span><Text as="h2" variant="headingSm">Size &amp; spacing</Text></InlineStack><LayoutControls value={layout} onChange={setLayout} /></BlockStack></Card>
+            <SectionCard title="Display widget on store" icon="eye" tone="blue" actions={<Button onClick={() => setEnabled(!enabled)} variant={enabled ? "primary" : undefined} size="slim">{enabled ? "ON" : "OFF"}</Button>} />
+            <SectionCard title="General" icon="sliders" tone="violet" actions={<Button variant="plain" size="slim">Reset to default</Button>}><BlockStack gap="400"><Checkbox label="Remove close button" checked={removeCloseButton} onChange={setRemoveCloseButton} /><Text as="p" variant="bodySm" fontWeight="bold">Floating button position</Text><InlineStack gap="200"><Button size="slim" variant={position === "left" ? "primary" : undefined} onClick={() => setPosition("left")}>Left</Button><Button size="slim" variant={position === "right" ? "primary" : undefined} onClick={() => setPosition("right")}>Right</Button></InlineStack><RangeSlider label="Floating button radius" value={fabRadius} onChange={(v) => setFabRadius(v as number)} min={0} max={50} output /></BlockStack></SectionCard>
+            <SectionCard title="Colors" icon="palette" tone="amber" actions={<Button variant="plain" size="slim">Reset to default</Button>}><BlockStack gap="400"><ColorPickerInput label="Floating button background" value={fabBg} onChange={setFabBg} /><ColorPickerInput label="Floating button icon" value={fabIcon} onChange={setFabIcon} /><ColorPickerInput label="Close button color" value={closeBtnColor} onChange={setCloseBtnColor} /><ColorPickerInput label="Close button icon" value={closeIconColor} onChange={setCloseIconColor} /></BlockStack></SectionCard>
+            <SectionCard title="Size & spacing" icon="ruler" tone="mint"><BlockStack gap="400"><LayoutControls value={layout} onChange={setLayout} /></BlockStack></SectionCard>
           </BlockStack>
         </Layout.Section>
         <Layout.Section variant="oneThird">
-          <StickyPreview><Card><BlockStack gap="400">
-            <InlineStack align="space-between"><Text as="h2" variant="headingSm">Preview</Text><InlineStack gap="100"><Button size="slim" variant={previewDevice === "desktop" ? "primary" : undefined} onClick={() => setPreviewDevice("desktop")}>🖥</Button><Button size="slim" variant={previewDevice === "mobile" ? "primary" : undefined} onClick={() => setPreviewDevice("mobile")}>📱</Button></InlineStack></InlineStack>
+          <StickyPreview><SectionCard title="Preview" icon="monitor" tone="sky" actions={<InlineStack gap="100"><Button size="slim" variant={previewDevice === "desktop" ? "primary" : undefined} onClick={() => setPreviewDevice("desktop")}>🖥</Button><Button size="slim" variant={previewDevice === "mobile" ? "primary" : undefined} onClick={() => setPreviewDevice("mobile")}>📱</Button></InlineStack>}><BlockStack gap="400">
             <Box background="bg-surface-secondary" borderRadius="300" padding="200">
               <DeviceMockup device={previewDevice}>
                 <div style={{ position: "relative", minHeight: previewDevice === "mobile" ? "300px" : "320px" }}>
@@ -74,9 +82,10 @@ export default function BxgyFab() {
                 </div>
               </DeviceMockup>
             </Box>
-          </BlockStack></Card></StickyPreview>
+          </BlockStack></SectionCard></StickyPreview>
         </Layout.Section>
       </Layout>
+      </div>
     </Page>
   );
 }

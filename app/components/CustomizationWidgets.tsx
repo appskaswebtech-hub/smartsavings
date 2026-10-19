@@ -87,19 +87,10 @@ export function ColorPickerInput({
 }
 
 /* ── Sticky Preview Wrapper ──────────────────────────── */
+// Styles live in app/styles/theme.css: sticky beside the form, a normal block
+// once the layout stacks on phones and small tablets.
 export function StickyPreview({ children }: { children: ReactNode }) {
-  return (
-    <div
-      style={{
-        position: "sticky",
-        top: "16px",
-        maxHeight: "calc(100vh - 120px)",
-        overflowY: "auto",
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div className="ss-sticky-preview">{children}</div>;
 }
 
 /* ── Browser / Phone Mockup ──────────────────────────── */

@@ -2,19 +2,19 @@ import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useNavigate, Link } from "@remix-run/react";
 import {
   Page,
-  Card,
   Text,
   BlockStack,
   InlineStack,
   Button,
   Box,
-  InlineGrid,
+
   Tabs,
   Icon,
-  Badge,
+
 } from "@shopify/polaris";
 import { LockIcon } from "@shopify/polaris-icons";
 import { useState, useCallback } from "react";
+import "../styles/campaign-picker.css";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -44,7 +44,7 @@ function CampaignTypeCard({
   onLearnMoreClick,
 }: CampaignTypeCardProps) {
   return (
-    <Card>
+    <div className="campaign-card"><div className="Polaris-Box campaign-card-inner">
       <BlockStack gap="400">
         {/* Preview Area */}
         <Box
@@ -54,7 +54,7 @@ function CampaignTypeCard({
           minHeight="160px"
         >
           <InlineStack align="center" blockAlign="center">
-            <div
+            <div className="ss-campaigns-create__div-row"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -83,7 +83,7 @@ function CampaignTypeCard({
 
         {/* Example */}
         <InlineStack gap="200" blockAlign="start">
-          <span style={{ fontSize: "12px", color: "#8a8a8a" }}>💡</span>
+          <span className="ss-campaigns-create__span" style={{ fontSize: "12px", color: "#8a8a8a" }}>💡</span>
           <Text as="p" variant="bodySm" tone="subdued">
             {example}
           </Text>
@@ -103,7 +103,7 @@ function CampaignTypeCard({
           </Button>
         </InlineStack>
       </BlockStack>
-    </Card>
+    </div></div>
   );
 }
 
@@ -111,14 +111,14 @@ function CampaignTypeCard({
 
 function BulkPricePreview() {
   return (
-    <div
+    <div className="ss-campaigns-create__div-20"
       style={{
         display: "flex",
         alignItems: "center",
         gap: "16px",
       }}
     >
-      <div
+      <div className="ss-campaigns-create__div-20-2"
         style={{
           width: "70px",
           height: "80px",
@@ -130,7 +130,7 @@ function BulkPricePreview() {
           position: "relative",
         }}
       >
-        <div
+        <div className="ss-campaigns-create__div-20-3"
           style={{
             position: "absolute",
             top: "-6px",
@@ -145,18 +145,11 @@ function BulkPricePreview() {
         >
           -20%
         </div>
-        <div
-          style={{
-            width: "30px",
-            height: "50px",
-            background: "#ccc",
-            borderRadius: "4px",
-          }}
-        />
+        <img className="campaign-shirt" src="/images/campaigns/shirt.svg" alt="" />
       </div>
-      <div>
-        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-          <span
+      <div className="ss-campaigns-create__div-100">
+        <div className="ss-campaigns-create__div-100-2" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          <span className="ss-campaigns-create__span-100"
             style={{
               textDecoration: "line-through",
               color: "#999",
@@ -165,8 +158,8 @@ function BulkPricePreview() {
           >
             $100
           </span>
-          <span style={{ fontWeight: "bold", fontSize: "14px" }}>$80</span>
-          <span
+          <span className="ss-campaigns-create__span-80" style={{ fontWeight: "bold", fontSize: "14px" }}>$80</span>
+          <span className="ss-campaigns-create__span-sale"
             style={{
               background: "#10b981",
               color: "white",
@@ -186,7 +179,7 @@ function BulkPricePreview() {
 
 function QuantityDiscountPreview() {
   return (
-    <div
+    <div className="ss-campaigns-create__div-12"
       style={{
         background: "white",
         borderRadius: "8px",
@@ -197,7 +190,7 @@ function QuantityDiscountPreview() {
         maxWidth: "200px",
       }}
     >
-      <div
+      <div className="ss-campaigns-create__div-12-2"
         style={{
           fontSize: "14px",
           fontWeight: "bold",
@@ -206,7 +199,7 @@ function QuantityDiscountPreview() {
       >
         $12
       </div>
-      <div
+      <div className="ss-campaigns-create__div-buy-more-save"
         style={{
           fontSize: "10px",
           color: "#666",
@@ -217,11 +210,11 @@ function QuantityDiscountPreview() {
       </div>
       {[
         { qty: "Buy", label: "2+", save: "Save", pct: "" },
-        { qty: "3+", label: "", save: "SAVE 5%", pct: "" },
-        { qty: "5+", label: "", save: "SAVE 10%", pct: "" },
-        { qty: "8+", label: "", save: "SAVE 20%", pct: "" },
+        { qty: "1+", label: "", save: "Get 0%", pct: "" },
+        { qty: "2+", label: "", save: "Get 10%", pct: "" },
+        { qty: "5+", label: "", save: "Get 20%", pct: "" },
       ].map((row, i) => (
-        <div
+        <div className="ss-campaigns-create__div-buy"
           key={i}
           style={{
             display: "flex",
@@ -233,10 +226,10 @@ function QuantityDiscountPreview() {
             alignItems: "center",
           }}
         >
-          <span>
+          <span className="ss-campaigns-create__span-buy">
             {i === 0 ? (
-              <span style={{ display: "flex", gap: "4px" }}>
-                <span
+              <span className="ss-campaigns-create__span-buy-2" style={{ display: "flex", gap: "4px" }}>
+                <span className="ss-campaigns-create__span-buy-3"
                   style={{
                     background: "#10b981",
                     color: "white",
@@ -248,7 +241,7 @@ function QuantityDiscountPreview() {
                 >
                   Buy!
                 </span>
-                <span
+                <span className="ss-campaigns-create__span-save"
                   style={{
                     background: "#f97316",
                     color: "white",
@@ -265,7 +258,7 @@ function QuantityDiscountPreview() {
               row.qty
             )}
           </span>
-          <span style={{ color: "#10b981", fontWeight: "bold" }}>
+          <span className="ss-campaigns-create__span-2" style={{ color: "#10b981", fontWeight: "bold" }}>
             {i === 0 ? "" : row.save}
           </span>
         </div>
@@ -276,7 +269,7 @@ function QuantityDiscountPreview() {
 
 function BuyXGetYPreview() {
   return (
-    <div
+    <div className="ss-campaigns-create__div-customers-buy-1"
       style={{
         background: "white",
         borderRadius: "8px",
@@ -286,7 +279,7 @@ function BuyXGetYPreview() {
         maxWidth: "220px",
       }}
     >
-      <div
+      <div className="ss-campaigns-create__div-customers-buy-1-2"
         style={{
           display: "flex",
           alignItems: "center",
@@ -294,7 +287,7 @@ function BuyXGetYPreview() {
           marginBottom: "8px",
         }}
       >
-        <span
+        <span className="ss-campaigns-create__span-customers-buy-1"
           style={{
             background: "#10b981",
             color: "white",
@@ -304,10 +297,10 @@ function BuyXGetYPreview() {
             fontWeight: "bold",
           }}
         >
-          Customers Buy (1)
+          Frequently Bought
         </span>
       </div>
-      <div
+      <div className="ss-campaigns-create__div-row-2"
         style={{
           display: "flex",
           gap: "8px",
@@ -315,7 +308,7 @@ function BuyXGetYPreview() {
         }}
       >
         {[1, 2, 3].map((i) => (
-          <div
+          <div className="ss-campaigns-create__div-row-3"
             key={i}
             style={{
               width: "40px",
@@ -328,14 +321,7 @@ function BuyXGetYPreview() {
               justifyContent: "center",
             }}
           >
-            <div
-              style={{
-                width: "24px",
-                height: "24px",
-                background: "#ddd",
-                borderRadius: "3px",
-              }}
-            />
+            <img className="campaign-product-image" src={`/images/campaigns/${["shirt", "shoe", "cap"][i - 1]}.svg`} alt="" />
           </div>
         ))}
       </div>
@@ -345,7 +331,7 @@ function BuyXGetYPreview() {
 
 function AdvancedDiscountCodePreview() {
   return (
-    <div
+    <div className="ss-campaigns-create__div-your-cart"
       style={{
         background: "white",
         borderRadius: "8px",
@@ -356,10 +342,10 @@ function AdvancedDiscountCodePreview() {
         fontSize: "11px",
       }}
     >
-      <div style={{ color: "#999", fontSize: "9px", marginBottom: "2px" }}>
+      <div className="ss-campaigns-create__div-your-cart-2" style={{ color: "#999", fontSize: "9px", marginBottom: "2px" }}>
         Your cart
       </div>
-      <div
+      <div className="ss-campaigns-create__div-100-80"
         style={{
           display: "flex",
           gap: "8px",
@@ -367,19 +353,12 @@ function AdvancedDiscountCodePreview() {
           alignItems: "center",
         }}
       >
-        <div
-          style={{
-            width: "30px",
-            height: "30px",
-            background: "#f0f0f0",
-            borderRadius: "4px",
-          }}
-        />
-        <div>
-          <div style={{ fontSize: "9px" }}>$100 $80</div>
-          <div style={{ fontSize: "9px", color: "#999" }}>x1/pc</div>
+        <img className="campaign-cart-shirt" src="/images/campaigns/shirt.svg" alt="" />
+        <div className="ss-campaigns-create__div-100-80-2">
+          <div className="ss-campaigns-create__div-100-80-3" style={{ fontSize: "9px" }}>$100 $80</div>
+          <div className="ss-campaigns-create__div-x1-pc" style={{ fontSize: "9px", color: "#999" }}>x1/pc</div>
         </div>
-        <div
+        <div className="ss-campaigns-create__div-4"
           style={{
             width: "30px",
             height: "30px",
@@ -388,18 +367,18 @@ function AdvancedDiscountCodePreview() {
             marginLeft: "auto",
           }}
         />
-        <div>
-          <div style={{ fontSize: "9px" }}>$100</div>
+        <div className="ss-campaigns-create__div-100-3">
+          <div className="ss-campaigns-create__div-100-4" style={{ fontSize: "9px" }}>$100</div>
         </div>
       </div>
-      <div
+      <div className="ss-campaigns-create__div-save15shipfree"
         style={{
           display: "flex",
           gap: "4px",
           marginBottom: "8px",
         }}
       >
-        <div
+        <div className="ss-campaigns-create__div-save15shipfree-2"
           style={{
             flex: 1,
             background: "#f5f5f5",
@@ -411,7 +390,7 @@ function AdvancedDiscountCodePreview() {
         >
           SAVE15SHIPFREE
         </div>
-        <div
+        <div className="ss-campaigns-create__div-apply"
           style={{
             background: "#10b981",
             color: "white",
@@ -424,17 +403,17 @@ function AdvancedDiscountCodePreview() {
           Apply
         </div>
       </div>
-      <div style={{ fontSize: "9px" }}>
-        <div
+      <div className="ss-campaigns-create__div-subtotal" style={{ fontSize: "9px" }}>
+        <div className="ss-campaigns-create__div-subtotal-2"
           style={{
             display: "flex",
             justifyContent: "space-between",
             marginBottom: "2px",
           }}
         >
-          <span>Subtotal</span>
-          <span>
-            <span
+          <span className="ss-campaigns-create__span-subtotal">Subtotal</span>
+          <span className="ss-campaigns-create__span-180">
+            <span className="ss-campaigns-create__span-180-2"
               style={{
                 background: "#fee2e2",
                 color: "#e53e3e",
@@ -449,22 +428,22 @@ function AdvancedDiscountCodePreview() {
             $162
           </span>
         </div>
-        <div
+        <div className="ss-campaigns-create__div-shipping"
           style={{
             display: "flex",
             justifyContent: "space-between",
             marginBottom: "2px",
           }}
         >
-          <span>Shipping</span>
-          <span
+          <span className="ss-campaigns-create__span-shipping">Shipping</span>
+          <span className="ss-campaigns-create__span-free-shipping"
             style={{
               display: "flex",
               alignItems: "center",
               gap: "2px",
             }}
           >
-            <span
+            <span className="ss-campaigns-create__span-free-shipping-2"
               style={{
                 background: "#10b981",
                 color: "white",
@@ -477,7 +456,7 @@ function AdvancedDiscountCodePreview() {
             </span>
           </span>
         </div>
-        <div
+        <div className="ss-campaigns-create__div-total"
           style={{
             display: "flex",
             justifyContent: "space-between",
@@ -487,8 +466,8 @@ function AdvancedDiscountCodePreview() {
             paddingTop: "4px",
           }}
         >
-          <span>Total</span>
-          <span>$90</span>
+          <span className="ss-campaigns-create__span-total">Total</span>
+          <span className="ss-campaigns-create__span-90">$90</span>
         </div>
       </div>
     </div>
@@ -497,7 +476,7 @@ function AdvancedDiscountCodePreview() {
 
 function CartGoalPreview() {
   return (
-    <div
+    <div className="ss-campaigns-create__div-30"
       style={{
         background: "white",
         borderRadius: "8px",
@@ -507,12 +486,12 @@ function CartGoalPreview() {
         maxWidth: "200px",
       }}
     >
-      <div
+      <div className="ss-campaigns-create__div-30-2"
         style={{ fontSize: "16px", fontWeight: "bold", marginBottom: "4px" }}
       >
         $30
       </div>
-      <div
+      <div className="ss-campaigns-create__div-buy-more-save-2"
         style={{
           fontSize: "10px",
           color: "#666",
@@ -523,11 +502,11 @@ function CartGoalPreview() {
         Buy more, save more!
       </div>
       {[
-        { range: "$50+", save: "SAVE 5%" },
-        { range: "$100+", save: "SAVE 10%" },
-        { range: "$150+", save: "SAVE 15%" },
+        { range: "$50+", save: "Get 10%" },
+        { range: "$100+", save: "Get 15%" },
+        { range: "$200+", save: "Get 20%" },
       ].map((row, i) => (
-        <div
+        <div className="ss-campaigns-create__div-row-4"
           key={i}
           style={{
             display: "flex",
@@ -540,8 +519,8 @@ function CartGoalPreview() {
             alignItems: "center",
           }}
         >
-          <span>{row.range}</span>
-          <span
+          <span className="ss-campaigns-create__span-3">{row.range}</span>
+          <span className="ss-campaigns-create__span-4"
             style={{
               background: "#10b981",
               color: "white",
@@ -561,7 +540,7 @@ function CartGoalPreview() {
 
 function ShippingDiscountPreview() {
   return (
-    <div
+    <div className="ss-campaigns-create__div-your-cart-3"
       style={{
         background: "white",
         borderRadius: "8px",
@@ -572,21 +551,21 @@ function ShippingDiscountPreview() {
         fontSize: "11px",
       }}
     >
-      <div style={{ color: "#999", fontSize: "9px", marginBottom: "8px" }}>
+      <div className="ss-campaigns-create__div-your-cart-4" style={{ color: "#999", fontSize: "9px", marginBottom: "8px" }}>
         Your cart
       </div>
-      <div style={{ fontSize: "9px" }}>
-        <div
+      <div className="ss-campaigns-create__div-subtotal-3" style={{ fontSize: "9px" }}>
+        <div className="ss-campaigns-create__div-subtotal-4"
           style={{
             display: "flex",
             justifyContent: "space-between",
             marginBottom: "4px",
           }}
         >
-          <span>Subtotal</span>
-          <span>-</span>
+          <span className="ss-campaigns-create__span-subtotal-2">Subtotal</span>
+          <span className="ss-campaigns-create__span-5">-</span>
         </div>
-        <div
+        <div className="ss-campaigns-create__div-shipping-2"
           style={{
             display: "flex",
             justifyContent: "space-between",
@@ -594,15 +573,15 @@ function ShippingDiscountPreview() {
             alignItems: "center",
           }}
         >
-          <span style={{ fontWeight: "bold" }}>Shipping</span>
-          <span
+          <span className="ss-campaigns-create__span-shipping-2" style={{ fontWeight: "bold" }}>Shipping</span>
+          <span className="ss-campaigns-create__span-shipping-discount"
             style={{
               display: "flex",
               alignItems: "center",
               gap: "4px",
             }}
           >
-            <span
+            <span className="ss-campaigns-create__span-shipping-discount-2"
               style={{
                 background: "#10b981",
                 color: "white",
@@ -614,7 +593,7 @@ function ShippingDiscountPreview() {
             >
               shipping discount
             </span>
-            <span
+            <span className="ss-campaigns-create__span-10"
               style={{
                 textDecoration: "line-through",
                 color: "#999",
@@ -622,10 +601,10 @@ function ShippingDiscountPreview() {
             >
               $10
             </span>
-            <span style={{ fontWeight: "bold" }}>$0</span>
+            <span className="ss-campaigns-create__span-0" style={{ fontWeight: "bold" }}>$0</span>
           </span>
         </div>
-        <div
+        <div className="ss-campaigns-create__div-total-2"
           style={{
             display: "flex",
             justifyContent: "space-between",
@@ -634,8 +613,8 @@ function ShippingDiscountPreview() {
             marginTop: "4px",
           }}
         >
-          <span style={{ fontWeight: "bold" }}>Total</span>
-          <span>-</span>
+          <span className="ss-campaigns-create__span-total-2" style={{ fontWeight: "bold" }}>Total</span>
+          <span className="ss-campaigns-create__span-6">-</span>
         </div>
       </div>
     </div>
@@ -644,7 +623,7 @@ function ShippingDiscountPreview() {
 
 function ShippingProtectionPreview() {
   return (
-    <div
+    <div className="ss-campaigns-create__div-yes-add-shipping"
       style={{
         background: "white",
         borderRadius: "8px",
@@ -655,10 +634,10 @@ function ShippingProtectionPreview() {
         fontSize: "11px",
       }}
     >
-      <div style={{ fontWeight: "bold", fontSize: "9px", marginBottom: "6px" }}>
+      <div className="ss-campaigns-create__div-yes-add-shipping-2" style={{ fontWeight: "bold", fontSize: "9px", marginBottom: "6px" }}>
         Yes, add shipping insurance please!
       </div>
-      <div
+      <div className="ss-campaigns-create__div-row-5"
         style={{
           display: "flex",
           gap: "6px",
@@ -668,7 +647,7 @@ function ShippingProtectionPreview() {
           padding: "6px",
         }}
       >
-        <div
+        <div className="ss-campaigns-create__div-row-6"
           style={{
             width: "22px",
             height: "22px",
@@ -683,11 +662,11 @@ function ShippingProtectionPreview() {
         >
           📦
         </div>
-        <div style={{ flex: 1, fontSize: "8px", color: "#666" }}>
-          <div style={{ fontWeight: "bold", fontSize: "9px", color: "#111" }}>Shipping insurance</div>
-          <div>from Damage, Loss & Theft for $20</div>
+        <div className="ss-campaigns-create__div-shipping-insurance" style={{ flex: 1, fontSize: "8px", color: "#666" }}>
+          <div className="ss-campaigns-create__div-shipping-insurance-2" style={{ fontWeight: "bold", fontSize: "9px", color: "#111" }}>Shipping insurance</div>
+          <div className="ss-campaigns-create__div-from-damage-loss">from Damage, Loss & Theft for $20</div>
         </div>
-        <span
+        <span className="ss-campaigns-create__span-7"
           style={{
             width: "11px",
             height: "11px",
@@ -710,7 +689,7 @@ function ShippingProtectionPreview() {
 /* ── Main Component ────────────────────────────────────────── */
 
 export default function CreateCampaign() {
-  const { currentPlan } = useLoaderData<typeof loader>();
+  useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
 
@@ -823,13 +802,15 @@ export default function CreateCampaign() {
   };
 
   return (
-    <Page
+    <div className="campaign-picker"><Page
+      fullWidth
       backAction={{ content: "Campaigns", url: "/app/campaigns" }}
       title="Choose campaign type"
     >
+      <img className="campaign-hero" src="/images/campaigns/discount.svg" alt="" />
       <BlockStack gap="200">
         <Text as="p" variant="bodyMd" tone="subdued">
-          Select the type of campaign you wish to create.
+          Select the type of campaign you want to create.
         </Text>
 
         <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange}>
@@ -854,7 +835,7 @@ export default function CreateCampaign() {
                 </Text>
               </Box>
             ) : (
-              <InlineGrid columns={3} gap="400">
+              <div className="campaign-grid">
                 {filteredCampaigns.map((campaign) => (
                   <CampaignTypeCard
                     key={campaign.id}
@@ -869,7 +850,7 @@ export default function CreateCampaign() {
                     }}
                   />
                 ))}
-              </InlineGrid>
+              </div>
             )}
 
             {/* Footer link */}
@@ -887,6 +868,6 @@ export default function CreateCampaign() {
           </Box>
         </Tabs>
       </BlockStack>
-    </Page>
+    </Page></div>
   );
 }

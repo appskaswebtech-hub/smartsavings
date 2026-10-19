@@ -12,12 +12,17 @@ import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
+import themeStyles from "../styles/theme.css?url";
 
 import { authenticate } from "../shopify.server";
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
+// Theme goes after Polaris so its token overrides win the cascade.
+export const links = () => [
+  { rel: "stylesheet", href: polarisStyles },
+  { rel: "stylesheet", href: themeStyles },
+];
 
 // ─── Plan display data (UI only — no billing logic here) ─────────────────────
 

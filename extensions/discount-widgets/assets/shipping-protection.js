@@ -101,21 +101,34 @@
 
     // The app's shop metafield, embedded by the block's Liquid. The app only
     // writes campaigns that are active and ready, so an empty list means "off".
-    function readCampaigns() {
+    // `style` is Customization > Shipping protection, shared by every campaign.
+    function readConfig() {
       var el = box.querySelector('[data-sd-protect-config]');
-      if (!el) return [];
+      if (!el) return { campaigns: [], style: {} };
       var parsed;
       try {
         parsed = JSON.parse(el.textContent || 'null');
       } catch (e) {
-        return [];
+        return { campaigns: [], style: {} };
       }
       // Older stores published a single campaign object.
       var raw = parsed && Array.isArray(parsed.campaigns) ? parsed.campaigns : parsed ? [parsed] : [];
-      return raw.filter(function(c) { return c && c.feeProductId && c.feeVariantId; });
+      return {
+        campaigns: raw.filter(function(c) { return c && c.feeProductId && c.feeVariantId; }),
+        style: (parsed && parsed.style) || {}
+      };
     }
 
-    var all = readCampaigns();
+    var config = readConfig();
+    var style = config.style;
+    // The merchant can turn either surface off without editing the theme.
+    if (onProductPage ? style.showOnProduct === false : style.showOnCart === false) {
+      hide(onProductPage
+        ? 'product pages are switched off in Customization › Shipping protection.'
+        : 'the cart page is switched off in Customization › Shipping protection.');
+      return;
+    }
+    var all = config.campaigns;
     if (all.length === 0) {
       hide('there\'s no active Shipping protection campaign ready for this store — create or save one in the app.');
       return;
@@ -162,6 +175,50 @@
       return Math.round(valueCents * c.percentage / 100);
     }
 
+    // Only what the merchant actually set — anything missing keeps the value the
+    // block's Liquid put there, which is the theme editor's setting.
+    function px(v) {
+      return typeof v === 'number' && isFinite(v) ? v + 'px' : null;
+    }
+    function applyStyle(card) {
+      var heading = card.querySelector('.sd-protect-heading');
+      var label = card.querySelector('label');
+      var check = card.querySelector('.sd-protect-check');
+      var img = card.querySelector('.sd-protect-img');
+      var title = card.querySelector('.sd-protect-title');
+      var body = [card.querySelector('.sd-protect-subtitle'), card.querySelector('.sd-protect-desc')];
+
+      if (px(style.width)) card.style.width = px(style.width);
+      if (px(style.paddingTop)) card.style.paddingTop = px(style.paddingTop);
+      if (px(style.paddingBottom)) card.style.paddingBottom = px(style.paddingBottom);
+      if (px(style.paddingLeft)) card.style.paddingLeft = px(style.paddingLeft);
+      if (px(style.paddingRight)) card.style.paddingRight = px(style.paddingRight);
+
+      if (label) {
+        if (style.cardBg) label.style.background = style.cardBg;
+        if (style.borderColor) label.style.borderColor = style.borderColor;
+        if (px(style.borderRadius)) label.style.borderRadius = px(style.borderRadius);
+      }
+      if (heading) {
+        if (style.headingColor) heading.style.color = style.headingColor;
+        if (px(style.headingSize)) heading.style.fontSize = px(style.headingSize);
+      }
+      if (check && style.accentColor) check.style.accentColor = style.accentColor;
+      if (img && px(style.iconSize)) {
+        img.style.width = px(style.iconSize);
+        img.style.height = px(style.iconSize);
+      }
+      if (title) {
+        if (style.titleColor) title.style.color = style.titleColor;
+        if (px(style.titleSize)) title.style.fontSize = px(style.titleSize);
+      }
+      body.forEach(function(el) {
+        if (!el) return;
+        if (style.bodyColor) el.style.color = style.bodyColor;
+        if (px(style.bodySize)) el.style.fontSize = px(style.bodySize);
+      });
+    }
+
     function buildCard(c, items) {
       var card = tpl.content.firstElementChild.cloneNode(true);
       var check = card.querySelector('.sd-protect-check');
@@ -179,6 +236,7 @@
       }
       check.checked = added;
       check.setAttribute('aria-label', c.title || 'Shipping protection');
+      applyStyle(card);
 
       check.addEventListener('change', function() {
         check.disabled = true;

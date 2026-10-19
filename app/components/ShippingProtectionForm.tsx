@@ -5,7 +5,6 @@ import {
   BlockStack,
   Box,
   Button,
-  Card,
   ChoiceList,
   DropZone,
   FormLayout,
@@ -17,7 +16,13 @@ import {
 } from "@shopify/polaris";
 import { ImageIcon } from "@shopify/polaris-icons";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import type { ProtectedProduct, ProtectionConfigDraft } from "../lib/shippingProtection";
+import { SectionCard } from "./Theme";
+import {
+  DEFAULT_PROTECTION_STYLE,
+  type ProtectedProduct,
+  type ProtectionConfigDraft,
+  type ProtectionStyle,
+} from "../lib/shippingProtection";
 
 // Form + preview for Shipping protection campaigns, shared by
 // app.campaigns.new.tsx and app.campaigns.edit.$id.tsx. Merchants choose what
@@ -73,9 +78,8 @@ export function ShippingProtectionForm({ config, onConfigChange, supported, curr
         </Banner>
       )}
 
-      <Card>
+      <SectionCard title="Protected products" icon="shield" tone="blue">
         <BlockStack gap="400">
-          <Text as="h2" variant="headingMd">Protected products</Text>
           <ChoiceList
             title="Offer protection for"
             titleHidden
@@ -123,11 +127,10 @@ export function ShippingProtectionForm({ config, onConfigChange, supported, curr
             </BlockStack>
           )}
         </BlockStack>
-      </Card>
+      </SectionCard>
 
-      <Card>
+      <SectionCard title="Pricing" icon="percent" tone="violet">
         <BlockStack gap="400">
-          <Text as="h2" variant="headingMd">Pricing</Text>
           <ChoiceList
             title="Protection fee"
             choices={[
@@ -167,11 +170,10 @@ export function ShippingProtectionForm({ config, onConfigChange, supported, curr
             />
           )}
         </BlockStack>
-      </Card>
+      </SectionCard>
 
-      <Card>
+      <SectionCard title="Widget" icon="palette" tone="amber">
         <BlockStack gap="400">
-          <Text as="h2" variant="headingMd">Widget</Text>
           <IconField url={config.feeImageUrl} onChange={(feeImageUrl) => set({ feeImageUrl })} />
           <FormLayout>
             <TextField
@@ -199,7 +201,7 @@ export function ShippingProtectionForm({ config, onConfigChange, supported, curr
             />
           </FormLayout>
         </BlockStack>
-      </Card>
+      </SectionCard>
     </BlockStack>
   );
 }
@@ -266,70 +268,126 @@ function IconField({ url, onChange }: { url: string; onChange: (url: string) => 
 interface PreviewProps {
   config: ProtectionConfigDraft;
   currencyCode: string;
+  /** Customization > Shipping protection; defaults match the theme block's. */
+  style?: ProtectionStyle;
 }
 
-export function ShippingProtectionPreview({ config, currencyCode }: PreviewProps) {
-  const fixed = config.pricingType === "fixed_amount";
-  const feeAmount = fixed
-    ? parseFloat(config.fixedAmount) || 0
-    : (SAMPLE_CART_VALUE * (parseFloat(config.percentage) || 0)) / 100;
-  const subtitle = (config.subtitle || "").replace(/\{price\}/g, formatMoney(feeAmount, currencyCode));
+/**
+ * The opt-in card exactly as the storefront widget draws it. Shared by the
+ * campaign form's preview and the Customization page, so styling it in one
+ * place is what you see in the other.
+ */
+export function ProtectionCard({ config, currencyCode, style }: PreviewProps) {
+  const s = { ...DEFAULT_PROTECTION_STYLE, ...style };
+  const feeAmount =
+    config.pricingType === "fixed_amount"
+      ? parseFloat(config.fixedAmount) || 0
+      : (SAMPLE_CART_VALUE * (parseFloat(config.percentage) || 0)) / 100;
+  const subtitle = (config.subtitle || "").replace(/{price}/g, formatMoney(feeAmount, currencyCode));
+  const px = (v?: number) => (v === undefined ? undefined : `${v}px`);
 
   return (
-    <Card>
+    <div
+      style={{
+        fontFamily: "inherit",
+        width: px(s.width),
+        paddingTop: px(s.paddingTop),
+        paddingBottom: px(s.paddingBottom),
+        paddingLeft: px(s.paddingLeft),
+        paddingRight: px(s.paddingRight),
+      }}
+    >
+      {config.heading && (
+        <div
+          style={{
+            fontWeight: 600,
+            fontSize: px(s.headingSize),
+            color: s.headingColor,
+            marginBottom: "8px",
+          }}
+        >
+          {config.heading}
+        </div>
+      )}
+      <div
+        style={{
+          display: "flex",
+          gap: "12px",
+          alignItems: "flex-start",
+          border: `1px solid ${s.borderColor}`,
+          borderRadius: px(s.borderRadius),
+          padding: "14px",
+          background: s.cardBg,
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            width: "18px",
+            height: "18px",
+            borderRadius: "4px",
+            border: `1.5px solid ${s.accentColor}`,
+            flexShrink: 0,
+            marginTop: "2px",
+          }}
+        />
+        {config.feeImageUrl ? (
+          <img
+            src={config.feeImageUrl}
+            alt=""
+            style={{
+              width: px(s.iconSize),
+              height: px(s.iconSize),
+              objectFit: "contain",
+              borderRadius: "8px",
+              flexShrink: 0,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: px(s.iconSize),
+              height: px(s.iconSize),
+              borderRadius: "8px",
+              background: "#f1f1f1",
+              flexShrink: 0,
+            }}
+          />
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: px(s.titleSize), color: s.titleColor }}>
+            {config.title || "Shipping insurance"}
+          </div>
+          {subtitle && (
+            <div style={{ fontSize: px(s.bodySize), color: s.bodyColor, opacity: 0.75, marginTop: "2px" }}>
+              {subtitle}
+            </div>
+          )}
+          {config.description && (
+            <div style={{ fontSize: px(s.bodySize), color: s.bodyColor, opacity: 0.75, marginTop: "2px" }}>
+              {config.description}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ShippingProtectionPreview({ config, currencyCode, style }: PreviewProps) {
+  const fixed = config.pricingType === "fixed_amount";
+
+  return (
+    <SectionCard title="Preview" icon="eye" tone="sky">
       <BlockStack gap="300">
-        <Text as="h2" variant="headingMd">Preview</Text>
         <Text as="p" variant="bodySm" tone="subdued">
           {fixed
             ? "A flat fee per order"
             : `For ${formatMoney(SAMPLE_CART_VALUE, currencyCode)} of protected items`}{" "}
           — on product pages, the cart page and checkout.
         </Text>
-        <div style={{ fontFamily: "inherit" }}>
-          {config.heading && (
-            <div style={{ fontWeight: 600, fontSize: "14px", marginBottom: "8px" }}>{config.heading}</div>
-          )}
-          <div
-            style={{
-              display: "flex",
-              gap: "12px",
-              alignItems: "flex-start",
-              border: "1px solid #e3e3e3",
-              borderRadius: "10px",
-              padding: "14px",
-              background: "#fff",
-            }}
-          >
-            <div
-              aria-hidden="true"
-              style={{
-                width: "18px",
-                height: "18px",
-                borderRadius: "4px",
-                border: "1.5px solid #8a8a8a",
-                flexShrink: 0,
-                marginTop: "2px",
-              }}
-            />
-            {config.feeImageUrl ? (
-              <img
-                src={config.feeImageUrl}
-                alt=""
-                style={{ width: "44px", height: "44px", objectFit: "contain", borderRadius: "8px", flexShrink: 0 }}
-              />
-            ) : (
-              <div style={{ width: "44px", height: "44px", borderRadius: "8px", background: "#f1f1f1", flexShrink: 0 }} />
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: "13px" }}>{config.title || "Shipping insurance"}</div>
-              {subtitle && <div style={{ fontSize: "12px", color: "#616161", marginTop: "2px" }}>{subtitle}</div>}
-              {config.description && (
-                <div style={{ fontSize: "12px", color: "#616161", marginTop: "2px" }}>{config.description}</div>
-              )}
-            </div>
-          </div>
-        </div>
+        <ProtectionCard config={config} currencyCode={currencyCode} style={style} />
       </BlockStack>
-    </Card>
+    </SectionCard>
   );
 }

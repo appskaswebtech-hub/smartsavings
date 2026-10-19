@@ -1,11 +1,12 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit } from "@remix-run/react";
 import { useIsSaving } from "../lib/useIsSaving";
-import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Checkbox, Layout, Banner } from "@shopify/polaris";
+import { Page, Text, BlockStack, InlineStack, Button, Box, TextField, Checkbox, Layout, Banner } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { ColorPickerInput, StickyPreview, DeviceMockup, LayoutControls, type LayoutValue } from "../components/CustomizationWidgets";
+import { PageHeader, SectionCard } from "../components/Theme";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -91,26 +92,34 @@ export default function BxgyPopup() {
   );
 
   return (
-    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Buy X get Y pop-up" subtitle="Change pop-up text, color and behaviour." primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: isSaving }}>
+    <Page fullWidth>
+      <div className="ss-page">
+      <PageHeader
+        backTo="/app/customization"
+        backLabel="Customization"
+        title="Buy X get Y pop-up"
+        subtitle="Change pop-up text, color and behaviour."
+        primaryAction={{ content: "Save", icon: "save", onAction: handleSave, loading: isSaving, disabled: isSaving }}
+      />
       {saved && <Box paddingBlockEnd="400"><Banner tone="success" title="Settings saved!" onDismiss={() => setSaved(false)} /></Box>}
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
-            <Card><InlineStack align="space-between" blockAlign="center"><InlineStack gap="200"><span>👁</span><Text as="h2" variant="headingSm">Display widget on store</Text></InlineStack><Button onClick={() => setEnabled(!enabled)} variant={enabled ? "primary" : undefined} size="slim">{enabled ? "ON" : "OFF"}</Button></InlineStack></Card>
-            <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>✏️</span><Text as="h2" variant="headingSm">Text customization</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><Text as="p" variant="bodySm" fontWeight="bold">Header texts</Text><TextField label="Title" value={headerTitle} onChange={setHeaderTitle} autoComplete="off" /><TextField label="Subtitle" value={subtitle} onChange={setSubtitle} autoComplete="off" multiline={2} /><Text as="p" variant="bodySm" fontWeight="bold">Button labels</Text><TextField label='"Select"' value={selectText} onChange={setSelectText} autoComplete="off" /><TextField label='"Add to Cart"' value={addToCartText} onChange={setAddToCartText} autoComplete="off" /><TextField label='"Continue Shopping"' value={continueText} onChange={setContinueText} autoComplete="off" /><Checkbox label="Remove this button" checked={removeButton} onChange={setRemoveButton} /></BlockStack></Card>
-            <Card><BlockStack gap="400"><Text as="h2" variant="headingSm">Discount badge</Text><Text as="p" variant="bodySm">How the discount appears on badge</Text><InlineStack gap="200"><Button size="slim" variant={discountBadgeType === "percentage" ? "primary" : undefined} onClick={() => setDiscountBadgeType("percentage")}>Percentage</Button><Button size="slim" variant={discountBadgeType === "amount" ? "primary" : undefined} onClick={() => setDiscountBadgeType("amount")}>Amount</Button></InlineStack><Checkbox label='Show "Free Gift" badge' checked={showFreeGiftBadge} onChange={setShowFreeGiftBadge} /></BlockStack></Card>
-            <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Color palette</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><Text as="p" variant="bodySm" fontWeight="bold">Theme colors</Text><ColorPickerInput label="Primary color" value={primaryColor} onChange={setPrimaryColor} /><ColorPickerInput label="Secondary color" value={secondaryColor} onChange={setSecondaryColor} /><ColorPickerInput label="Border color" value={borderColor} onChange={setBorderColor} /><Text as="p" variant="bodySm" fontWeight="bold">Element colors</Text><ColorPickerInput label="Pop-up background" value={popupBg} onChange={setPopupBg} /><ColorPickerInput label="Header background" value={headerBg} onChange={setHeaderBg} /><ColorPickerInput label="Add to cart color" value={addToCartColor} onChange={setAddToCartColor} /><ColorPickerInput label="Sale badge color" value={saleBadgeColor} onChange={setSaleBadgeColor} /></BlockStack></Card>
-            <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>⚙️</span><Text as="h2" variant="headingSm">Advanced</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><Text as="p" variant="bodySm">When should the pop-up be dismissed?</Text><Checkbox label="Dismiss until triggered again" checked={dismissBehavior === "until_triggered"} onChange={() => setDismissBehavior("until_triggered")} /><Checkbox label="Dismiss for 2 minutes after closing" checked={dismissBehavior === "2_minutes"} onChange={() => setDismissBehavior("2_minutes")} /><Checkbox label="Keep displaying until moved to action" checked={dismissBehavior === "keep_displaying"} onChange={() => setDismissBehavior("keep_displaying")} /></BlockStack></Card>
-            <Card><BlockStack gap="400"><InlineStack gap="200"><span>📐</span><Text as="h2" variant="headingSm">Size &amp; spacing</Text></InlineStack><LayoutControls value={layout} onChange={setLayout} /></BlockStack></Card>
+            <SectionCard title="Display widget on store" icon="eye" tone="blue" actions={<Button onClick={() => setEnabled(!enabled)} variant={enabled ? "primary" : undefined} size="slim">{enabled ? "ON" : "OFF"}</Button>} />
+            <SectionCard title="Text customization" icon="text" tone="sky" actions={<Button variant="plain" size="slim">Reset to default</Button>}><BlockStack gap="400"><Text as="p" variant="bodySm" fontWeight="bold">Header texts</Text><TextField label="Title" value={headerTitle} onChange={setHeaderTitle} autoComplete="off" /><TextField label="Subtitle" value={subtitle} onChange={setSubtitle} autoComplete="off" multiline={2} /><Text as="p" variant="bodySm" fontWeight="bold">Button labels</Text><TextField label='"Select"' value={selectText} onChange={setSelectText} autoComplete="off" /><TextField label='"Add to Cart"' value={addToCartText} onChange={setAddToCartText} autoComplete="off" /><TextField label='"Continue Shopping"' value={continueText} onChange={setContinueText} autoComplete="off" /><Checkbox label="Remove this button" checked={removeButton} onChange={setRemoveButton} /></BlockStack></SectionCard>
+            <SectionCard title="Discount badge" icon="tag" tone="violet"><BlockStack gap="400"><Text as="p" variant="bodySm">How the discount appears on badge</Text><InlineStack gap="200"><Button size="slim" variant={discountBadgeType === "percentage" ? "primary" : undefined} onClick={() => setDiscountBadgeType("percentage")}>Percentage</Button><Button size="slim" variant={discountBadgeType === "amount" ? "primary" : undefined} onClick={() => setDiscountBadgeType("amount")}>Amount</Button></InlineStack><Checkbox label='Show "Free Gift" badge' checked={showFreeGiftBadge} onChange={setShowFreeGiftBadge} /></BlockStack></SectionCard>
+            <SectionCard title="Color palette" icon="palette" tone="amber" actions={<Button variant="plain" size="slim">Reset to default</Button>}><BlockStack gap="400"><Text as="p" variant="bodySm" fontWeight="bold">Theme colors</Text><ColorPickerInput label="Primary color" value={primaryColor} onChange={setPrimaryColor} /><ColorPickerInput label="Secondary color" value={secondaryColor} onChange={setSecondaryColor} /><ColorPickerInput label="Border color" value={borderColor} onChange={setBorderColor} /><Text as="p" variant="bodySm" fontWeight="bold">Element colors</Text><ColorPickerInput label="Pop-up background" value={popupBg} onChange={setPopupBg} /><ColorPickerInput label="Header background" value={headerBg} onChange={setHeaderBg} /><ColorPickerInput label="Add to cart color" value={addToCartColor} onChange={setAddToCartColor} /><ColorPickerInput label="Sale badge color" value={saleBadgeColor} onChange={setSaleBadgeColor} /></BlockStack></SectionCard>
+            <SectionCard title="Advanced" icon="sliders" tone="violet" actions={<Button variant="plain" size="slim">Reset to default</Button>}><BlockStack gap="400"><Text as="p" variant="bodySm">When should the pop-up be dismissed?</Text><Checkbox label="Dismiss until triggered again" checked={dismissBehavior === "until_triggered"} onChange={() => setDismissBehavior("until_triggered")} /><Checkbox label="Dismiss for 2 minutes after closing" checked={dismissBehavior === "2_minutes"} onChange={() => setDismissBehavior("2_minutes")} /><Checkbox label="Keep displaying until moved to action" checked={dismissBehavior === "keep_displaying"} onChange={() => setDismissBehavior("keep_displaying")} /></BlockStack></SectionCard>
+            <SectionCard title="Size & spacing" icon="ruler" tone="mint"><BlockStack gap="400"><LayoutControls value={layout} onChange={setLayout} /></BlockStack></SectionCard>
           </BlockStack>
         </Layout.Section>
         <Layout.Section variant="oneThird">
-          <StickyPreview><Card><BlockStack gap="400">
-            <InlineStack align="space-between"><Text as="h2" variant="headingSm">Preview</Text><InlineStack gap="100"><Button size="slim" variant={previewDevice === "desktop" ? "primary" : undefined} onClick={() => setPreviewDevice("desktop")}>🖥</Button><Button size="slim" variant={previewDevice === "mobile" ? "primary" : undefined} onClick={() => setPreviewDevice("mobile")}>📱</Button></InlineStack></InlineStack>
+          <StickyPreview><SectionCard title="Preview" icon="monitor" tone="sky" actions={<InlineStack gap="100"><Button size="slim" variant={previewDevice === "desktop" ? "primary" : undefined} onClick={() => setPreviewDevice("desktop")}>🖥</Button><Button size="slim" variant={previewDevice === "mobile" ? "primary" : undefined} onClick={() => setPreviewDevice("mobile")}>📱</Button></InlineStack>}><BlockStack gap="400">
             <Box background="bg-surface-secondary" borderRadius="300" padding="200"><DeviceMockup device={previewDevice}>{enabled && <PopupPreview />}</DeviceMockup></Box>
-          </BlockStack></Card></StickyPreview>
+          </BlockStack></SectionCard></StickyPreview>
         </Layout.Section>
       </Layout>
+      </div>
     </Page>
   );
 }

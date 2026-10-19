@@ -1,11 +1,12 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { useLoaderData, useSubmit } from "@remix-run/react";
 import { useIsSaving } from "../lib/useIsSaving";
-import { Page, Card, Text, BlockStack, InlineStack, Button, Box, TextField, Checkbox, Layout, RangeSlider, Banner } from "@shopify/polaris";
+import { Page, Text, BlockStack, InlineStack, Button, Box, TextField, Checkbox, Layout, RangeSlider, Banner } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { ColorPickerInput, StickyPreview, DeviceMockup, LayoutControls, type LayoutValue } from "../components/CustomizationWidgets";
+import { PageHeader, SectionCard } from "../components/Theme";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -65,21 +66,28 @@ export default function ShippingBar() {
   );
 
   return (
-    <Page backAction={{ content: "Customization", url: "/app/customization" }} title="Shipping progress bar" subtitle="Change content and style of the progress bar." primaryAction={{ content: "Save", onAction: handleSave, loading: isSaving, disabled: isSaving }}>
+    <Page fullWidth>
+      <div className="ss-page">
+      <PageHeader
+        backTo="/app/customization"
+        backLabel="Customization"
+        title="Shipping progress bar"
+        subtitle="Change content and style of the progress bar."
+        primaryAction={{ content: "Save", icon: "save", onAction: handleSave, loading: isSaving, disabled: isSaving }}
+      />
       {saved && <Box paddingBlockEnd="400"><Banner tone="success" title="Settings saved!" onDismiss={() => setSaved(false)} /></Box>}
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
-            <Card><BlockStack gap="300"><InlineStack gap="200"><span>👁</span><Text as="h2" variant="headingSm">Display progress bar in</Text></InlineStack><Checkbox label="Product page" checked={showOnProduct} onChange={setShowOnProduct} /><Checkbox label="Cart page" checked={showOnCart} onChange={setShowOnCart} /></BlockStack></Card>
-            <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>✏️</span><Text as="h2" variant="headingSm">Content</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><TextField label="Initial message" value={initialMessage} onChange={setInitialMessage} autoComplete="off" helpText="Use {amount} and {discount} as placeholders" /><TextField label="In progress message" value={inProgressMessage} onChange={setInProgressMessage} autoComplete="off" /><TextField label="Threshold reached message" value={thresholdMessage} onChange={setThresholdMessage} autoComplete="off" /></BlockStack></Card>
-            <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Card styles</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><TextField label="Text size" type="number" value={String(textSize)} onChange={(v) => setTextSize(parseInt(v) || 12)} autoComplete="off" suffix="px" /><ColorPickerInput label="Text color" value={textColor} onChange={setTextColor} /><ColorPickerInput label="Background color" value={bgColor} onChange={setBgColor} /><ColorPickerInput label="Border color" value={borderColor} onChange={setBorderColor} /><RangeSlider label="Border radius" value={borderRadiusVal} onChange={(v) => setBorderRadiusVal(v as number)} min={0} max={20} output suffix="px" /></BlockStack></Card>
-            <Card><BlockStack gap="400"><InlineStack align="space-between"><InlineStack gap="200"><span>🎨</span><Text as="h2" variant="headingSm">Progress bar styles</Text></InlineStack><Button variant="plain" size="slim">Reset to default</Button></InlineStack><ColorPickerInput label="Background color" value={progressBg} onChange={setProgressBg} /><ColorPickerInput label="Foreground color" value={progressFg} onChange={setProgressFg} /><RangeSlider label="Border radius" value={progressRadius} onChange={(v) => setProgressRadius(v as number)} min={0} max={20} output suffix="px" /></BlockStack></Card>
-            <Card><BlockStack gap="400"><InlineStack gap="200"><span>📐</span><Text as="h2" variant="headingSm">Size &amp; spacing</Text></InlineStack><LayoutControls value={layout} onChange={setLayout} /></BlockStack></Card>
+            <SectionCard title="Display progress bar in" icon="eye" tone="blue"><BlockStack gap="300"><Checkbox label="Product page" checked={showOnProduct} onChange={setShowOnProduct} /><Checkbox label="Cart page" checked={showOnCart} onChange={setShowOnCart} /></BlockStack></SectionCard>
+            <SectionCard title="Content" icon="text" tone="sky" actions={<Button variant="plain" size="slim">Reset to default</Button>}><BlockStack gap="400"><TextField label="Initial message" value={initialMessage} onChange={setInitialMessage} autoComplete="off" helpText="Use {amount} and {discount} as placeholders" /><TextField label="In progress message" value={inProgressMessage} onChange={setInProgressMessage} autoComplete="off" /><TextField label="Threshold reached message" value={thresholdMessage} onChange={setThresholdMessage} autoComplete="off" /></BlockStack></SectionCard>
+            <SectionCard title="Card styles" icon="palette" tone="amber" actions={<Button variant="plain" size="slim">Reset to default</Button>}><BlockStack gap="400"><TextField label="Text size" type="number" value={String(textSize)} onChange={(v) => setTextSize(parseInt(v) || 12)} autoComplete="off" suffix="px" /><ColorPickerInput label="Text color" value={textColor} onChange={setTextColor} /><ColorPickerInput label="Background color" value={bgColor} onChange={setBgColor} /><ColorPickerInput label="Border color" value={borderColor} onChange={setBorderColor} /><RangeSlider label="Border radius" value={borderRadiusVal} onChange={(v) => setBorderRadiusVal(v as number)} min={0} max={20} output suffix="px" /></BlockStack></SectionCard>
+            <SectionCard title="Progress bar styles" icon="palette" tone="amber" actions={<Button variant="plain" size="slim">Reset to default</Button>}><BlockStack gap="400"><ColorPickerInput label="Background color" value={progressBg} onChange={setProgressBg} /><ColorPickerInput label="Foreground color" value={progressFg} onChange={setProgressFg} /><RangeSlider label="Border radius" value={progressRadius} onChange={(v) => setProgressRadius(v as number)} min={0} max={20} output suffix="px" /></BlockStack></SectionCard>
+            <SectionCard title="Size & spacing" icon="ruler" tone="mint"><BlockStack gap="400"><LayoutControls value={layout} onChange={setLayout} /></BlockStack></SectionCard>
           </BlockStack>
         </Layout.Section>
         <Layout.Section variant="oneThird">
-          <StickyPreview><Card><BlockStack gap="400">
-            <InlineStack align="space-between" wrap={false}><Text as="h2" variant="headingSm">Preview</Text><InlineStack gap="200"><Button size="slim" variant={previewMode === "product" ? "primary" : undefined} onClick={() => setPreviewMode("product")}>Product page</Button><Button size="slim" variant={previewMode === "cart" ? "primary" : undefined} onClick={() => setPreviewMode("cart")}>Cart page</Button></InlineStack></InlineStack>
+          <StickyPreview><SectionCard title="Preview" icon="monitor" tone="sky" actions={<InlineStack gap="200"><Button size="slim" variant={previewMode === "product" ? "primary" : undefined} onClick={() => setPreviewMode("product")}>Product page</Button><Button size="slim" variant={previewMode === "cart" ? "primary" : undefined} onClick={() => setPreviewMode("cart")}>Cart page</Button></InlineStack>}><BlockStack gap="400">
             <InlineStack align="end" gap="100"><Button size="slim" variant={previewDevice === "desktop" ? "primary" : undefined} onClick={() => setPreviewDevice("desktop")}>🖥</Button><Button size="slim" variant={previewDevice === "mobile" ? "primary" : undefined} onClick={() => setPreviewDevice("mobile")}>📱</Button></InlineStack>
             <Box background="bg-surface-secondary" borderRadius="300" padding="200">
               <DeviceMockup device={previewDevice}>
@@ -113,9 +121,10 @@ export default function ShippingBar() {
                 )}
               </DeviceMockup>
             </Box>
-          </BlockStack></Card></StickyPreview>
+          </BlockStack></SectionCard></StickyPreview>
         </Layout.Section>
       </Layout>
+      </div>
     </Page>
   );
 }

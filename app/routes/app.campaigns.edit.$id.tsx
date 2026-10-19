@@ -15,7 +15,6 @@ import {
 } from "@remix-run/react";
 import {
   Page,
-  Card,
   Text,
   BlockStack,
   InlineStack,
@@ -28,7 +27,6 @@ import {
   FormLayout,
   Layout,
   Divider,
-  Badge,
 } from "@shopify/polaris";
 import { useState } from "react";
 import { buildEmailHtml, discountLabel, legacyToBlocks, type EmailBlock } from "../lib/emailTemplate";
@@ -63,6 +61,7 @@ import {
 import { ensureFeeProduct } from "../shippingProtectionProduct.server";
 import { getShopDisplayName } from "../lib/shopName.server";
 import { ShippingProtectionForm, ShippingProtectionPreview } from "../components/ShippingProtectionForm";
+import { PageHeader, Pill, SectionCard } from "../components/Theme";
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   bulk_price: "Bulk price editor",
@@ -896,20 +895,25 @@ export default function EditCampaign() {
   };
 
   return (
-    <Page
-      backAction={{ content: "Back", url: `/app/campaigns/${campaign.id}` }}
-      title={`Edit: ${campaign.name}`}
-      titleMetadata={<Badge>{CAMPAIGN_TYPE_LABELS[type] || type}</Badge>}
-      primaryAction={{
-        content: isSaving ? "Updating campaign..." : "Update campaign",
-        onAction: handleSave,
-        loading: isSaving,
-        disabled: isSaving,
-      }}
-      secondaryActions={[
-        { content: "Discard", onAction: () => navigate(`/app/campaigns/${campaign.id}`) },
-      ]}
-    >
+    <Page fullWidth>
+      <div className="ss-page">
+      <PageHeader
+        backTo={`/app/campaigns/${campaign.id}`}
+        backLabel="Back to campaign"
+        title={`Edit: ${campaign.name}`}
+        badge={<Pill tone="blue">{CAMPAIGN_TYPE_LABELS[type] || type}</Pill>}
+        primaryAction={{
+          content: isSaving ? "Updating campaign..." : "Update campaign",
+          icon: "save",
+          onAction: handleSave,
+          loading: isSaving,
+          disabled: isSaving,
+        }}
+        secondaryActions={[
+          { content: "Discard", onAction: () => navigate(`/app/campaigns/${campaign.id}`) },
+        ]}
+      />
+
       {actionData && !actionData.success && (
         <Box paddingBlockEnd="400">
           <Banner tone="critical">
@@ -921,11 +925,8 @@ export default function EditCampaign() {
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
-            <Card>
+            <SectionCard title="Campaign details" icon="info" tone="blue">
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Campaign details
-                </Text>
                 <TextField
                   label="Campaign name"
                   value={name}
@@ -934,7 +935,7 @@ export default function EditCampaign() {
                   helpText="Changing the name also renames matching Shopify discounts."
                 />
               </BlockStack>
-            </Card>
+            </SectionCard>
 
             {type === SHIPPING_PROTECTION && (
               <ShippingProtectionForm
@@ -947,11 +948,8 @@ export default function EditCampaign() {
 
             {type !== SHIPPING_PROTECTION && (
             <>
-            <Card>
+            <SectionCard title="Discount configuration" icon="percent" tone="violet">
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Discount configuration
-                </Text>
 
                 {type === "bulk_price" && (
                   <FormLayout>
@@ -994,7 +992,7 @@ export default function EditCampaign() {
                     />
                     {tiers.map((tier, i) => (
                       <InlineStack key={i} gap="200" blockAlign="end">
-                        <div style={{ flex: 1 }}>
+                        <div className="ss-field">
                           <TextField
                             label={i === 0 ? "Min quantity" : ""}
                             type="number"
@@ -1011,7 +1009,7 @@ export default function EditCampaign() {
                             }
                           />
                         </div>
-                        <div style={{ flex: 1 }}>
+                        <div className="ss-field">
                           <TextField
                             label={i === 0 ? "Discount" : ""}
                             type="number"
@@ -1098,7 +1096,7 @@ export default function EditCampaign() {
                             />
                             <InlineStack gap="200" blockAlign="end">
                               {showAmount && (
-                                <div style={{ flex: 1 }}>
+                                <div className="ss-field">
                                   <TextField
                                     label="Min order value"
                                     type="number"
@@ -1111,7 +1109,7 @@ export default function EditCampaign() {
                                 </div>
                               )}
                               {showQty && (
-                                <div style={{ flex: 1 }}>
+                                <div className="ss-field">
                                   <TextField
                                     label="Min quantity"
                                     type="number"
@@ -1123,7 +1121,7 @@ export default function EditCampaign() {
                                   />
                                 </div>
                               )}
-                              <div style={{ flex: 1 }}>
+                              <div className="ss-field">
                                 <TextField
                                   label="Discount"
                                   type="number"
@@ -1310,13 +1308,10 @@ export default function EditCampaign() {
                   </FormLayout>
                 )}
               </BlockStack>
-            </Card>
+            </SectionCard>
 
-            <Card>
+            <SectionCard title="Discount combinations" icon="layers" tone="mint">
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Discount combinations
-                </Text>
                 <BlockStack gap="300">
                   <Checkbox
                     label="Product discounts"
@@ -1338,13 +1333,10 @@ export default function EditCampaign() {
                   />
                 </BlockStack>
               </BlockStack>
-            </Card>
+            </SectionCard>
 
-            <Card>
+            <SectionCard title="Products" icon="box" tone="amber">
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Products
-                </Text>
                 <Select
                   label="Applies to"
                   options={[
@@ -1710,15 +1702,14 @@ export default function EditCampaign() {
                   </BlockStack>
                 )}
               </BlockStack>
-            </Card>
+            </SectionCard>
             </>
             )}
 
             {/* Email popup — advanced_discount_code only */}
             {type === "advanced_discount_code" && (
-              <Card>
+              <SectionCard title="Email popup" icon="mail" tone="rose">
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">Email popup</Text>
                   <Checkbox
                     label="Show a popup to collect shopper email before revealing the discount code"
                     checked={popupEnabled}
@@ -1816,14 +1807,11 @@ export default function EditCampaign() {
                     </FormLayout>
                   )}
                 </BlockStack>
-              </Card>
+              </SectionCard>
             )}
 
-            <Card>
+            <SectionCard title="Schedule" icon="calendar" tone="mint">
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Schedule
-                </Text>
                 <Checkbox
                   label="Start immediately"
                   checked={startNow}
@@ -1853,7 +1841,7 @@ export default function EditCampaign() {
                   />
                 )}
               </BlockStack>
-            </Card>
+            </SectionCard>
           </BlockStack>
         </Layout.Section>
 
@@ -1865,17 +1853,14 @@ export default function EditCampaign() {
               currencyCode={protection?.currencyCode || "USD"}
             />
           )}
-          <Card>
+          <SectionCard title="Summary" icon="chart" tone="sky">
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Summary
-              </Text>
               <Divider />
               <BlockStack gap="100">
                 <Text as="p" variant="bodySm" fontWeight="bold">
                   Campaign type
                 </Text>
-                <Badge>{CAMPAIGN_TYPE_LABELS[type] || type}</Badge>
+                <Pill tone="blue">{CAMPAIGN_TYPE_LABELS[type] || type}</Pill>
               </BlockStack>
               <BlockStack gap="100">
                 <Text as="p" variant="bodySm" fontWeight="bold">
@@ -1961,10 +1946,11 @@ export default function EditCampaign() {
                 </Text>
               </BlockStack>
             </BlockStack>
-          </Card>
+          </SectionCard>
           </BlockStack>
         </Layout.Section>
       </Layout>
+      </div>
     </Page>
   );
 }
